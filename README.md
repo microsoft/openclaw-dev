@@ -1,5 +1,7 @@
 # 🦞 OpenClaw in the Microsoft Cloud
 
+> **Alpha Sample** — This is an experimental reference implementation showing how to host [OpenClaw](https://github.com/openclaw/openclaw) on Azure. It is provided as-is with no security, safety, or production-readiness guarantees. Use at your own risk. Review all infrastructure, authentication, and network configurations before deploying in any environment with sensitive data. This sample has not been through a formal security review.
+
 Run [OpenClaw](https://github.com/openclaw/openclaw) — the open-source personal AI assistant — hosted in Azure. No local machine needed. No API keys to manage. Scales to zero when idle. Just your assistant, ready when you are.
 
 ## Why host OpenClaw in the cloud?
@@ -115,8 +117,18 @@ No API keys. No secrets to rotate. Authentication is managed identity only.
 | **RBAC** | `Cognitive Services User` scoped to the specific Azure OpenAI resource |
 | **OpenClaw** | `dmPolicy: "pairing"` — unknown senders are blocked until approved |
 | **Transport** | HTTPS/TLS on Microsoft backbone between all services |
+| **Container** | Runs as a single container with no elevated privileges |
+| **Storage** | TLS 1.2 minimum; shared key access for Azure Files volume mount |
 
-> **Note:** This template uses public endpoints (no VNet) for fast deployment and scale-to-zero. All traffic is encrypted and authenticated via managed identity. For full network isolation with VNet + private endpoints, see the [Advanced: VNet isolation](#advanced-vnet-isolation) section.
+### Known considerations
+
+- **Public ingress** — the ACA container app has a public FQDN. The OpenClaw gateway itself handles authentication via its pairing mode, but the HTTP endpoint is reachable. For network isolation, see the [VNet isolation](#advanced-vnet-isolation) section.
+- **ACR admin credentials** — the container registry uses admin user/password (stored as ACA secrets) for image pull. Consider switching to managed identity-based ACR pull for production.
+- **Storage shared key** — Azure Files volume mount uses a storage account key (required by ACA). The key is stored as an ACA-managed secret, not in code.
+- **Container runs as root** — the default `node:24-slim` image runs as root. For hardened deployments, add a non-root user to the Dockerfile.
+- **No WAF or rate limiting** — there is no Azure Application Gateway, Front Door, or rate limiting in front of the container app. OpenClaw's built-in pairing provides application-level auth, but there is no DDoS protection beyond ACA's defaults.
+
+> This is an alpha sample. Review and harden these areas before using with sensitive data or in a production environment.
 
 ## Troubleshooting
 
