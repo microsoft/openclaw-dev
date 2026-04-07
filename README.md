@@ -156,6 +156,63 @@ msftclaw down
 | Private Endpoints + DNS Zones | Azure OpenAI and Storage reachable only inside the VNet |
 | Log Analytics | Gateway and container logs |
 
+### Resource diagram
+
+```mermaid
+graph TB
+    subgraph AZURE["Azure Subscription"]
+        subgraph RG["Resource Group"]
+            subgraph VNET["Virtual Network 10.0.0.0/16"]
+                subgraph ACA_SUB["ACA Subnet 10.0.0.0/23"]
+                    subgraph ENV["Container Apps Environment — internal: true"]
+                        subgraph APP["Container App: openclaw — Managed Identity"]
+                            EP["entrypoint.sh"]
+                            TR["token-refresh.mjs<br/>@azure/identity"]
+                            subgraph RUNTIME["OpenClaw Runtime"]
+                                GW["🦞 OpenClaw Gateway :18789"]
+                                TEAMS_PLUGIN["Teams Plugin :3978"]
+                                SDK["OpenAI Node.js SDK"]
+                            end
+                            EP --> TR
+                            TR -->|"bearer token"| GW
+                            GW --> SDK
+                            GW --> TEAMS_PLUGIN
+                        end
+                    end
+                end
+                subgraph PE_SUB["Private Endpoints 10.0.2.0/24"]
+                    PE_AOAI["PE: Azure OpenAI"]
+                    PE_ST["PE: Azure Storage"]
+                end
+            end
+
+            AOAI["Azure OpenAI<br/>GPT-5-mini /openai/v1/<br/>disableLocalAuth: true"]
+            ST["Azure Storage + Files<br/>credentials / workspace / sessions"]
+            ACR["Azure Container Registry"]
+            LOG["Log Analytics"]
+            BOT["Azure Bot<br/>Single Tenant"]
+
+            SDK -->|"HTTPS via PE"| PE_AOAI
+            PE_AOAI -.->|"Private Link"| AOAI
+            APP -->|"Volume /mnt/state"| PE_ST
+            PE_ST -.->|"Private Link"| ST
+            ACR -.->|"Image Pull"| APP
+            ENV -.->|"Logs"| LOG
+            TEAMS_PLUGIN <-->|"Bot Framework"| BOT
+        end
+
+        ENTRA["Microsoft Entra ID"]
+        TR -->|"DefaultAzureCredential"| ENTRA
+        BOT -->|"OAuth"| ENTRA
+    end
+
+    TEAMS["Microsoft Teams"]
+    TEAMS <-->|"Bot Framework HTTPS"| BOT
+
+    USER["👤 User — Teams DM / @mention"]
+    USER --> TEAMS
+```
+
 ### How Azure OpenAI integration works
 
 OpenClaw natively uses the OpenAI Node.js SDK. The container sets `OPENAI_BASE_URL` to the Azure OpenAI v1 endpoint. Authentication uses `getBearerTokenProvider` from `@azure/identity` ([same pattern as the Azure OpenAI Starter Kit](https://github.com/Azure-Samples/azure-openai-starter/blob/main/src/typescript/responses_example_entra.ts)):
