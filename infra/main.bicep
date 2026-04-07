@@ -1,0 +1,82 @@
+// OpenClaw on Azure — azd orchestration template
+// Provisions Azure OpenAI (GPT-5-mini, v1 API) + Azure Container Apps with persistent storage
+targetScope = 'resourceGroup'
+
+@description('Environment name for tagging')
+@minLength(1)
+@maxLength(64)
+param environmentName string
+
+@description('Primary location for all resources')
+@allowed([
+  'australiaeast'
+  'eastus'
+  'eastus2'
+  'japaneast'
+  'koreacentral'
+  'southindia'
+  'swedencentral'
+  'switzerlandnorth'
+  'uksouth'
+])
+@metadata({
+  azd: {
+    type: 'location'
+  }
+})
+param location string
+
+@description('Unique token for resource naming')
+param resourceToken string = toLower(uniqueString(subscription().id, environmentName, location))
+
+@description('Principal ID of the deploying user (azd populates automatically)')
+param principalId string = ''
+
+// ---------------------------------------------------------------------------
+// 1. Azure OpenAI — GPT-5-mini via the v1 API (from aka.ms/openai/start)
+// ---------------------------------------------------------------------------
+module openai 'resources.bicep' = {
+  name: 'openai'
+  params: {
+    location: location
+    resourceToken: resourceToken
+    environmentName: environmentName
+    deployGptModel: true
+    gptModelName: 'gpt-5-mini'
+    gptModelVersion: '2025-08-07'
+    gptCapacity: 10
+    principalId: principalId
+  }
+}
+
+// Reference the deployed OpenAI resource to retrieve the API key
+resource openaiAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+  name: openai.outputs.AZURE_OPENAI_NAME
+}
+
+// ---------------------------------------------------------------------------
+// 2. Azure Container Apps — hosts OpenClaw with Azure Files state persistence
+// ---------------------------------------------------------------------------
+module aca 'aca.bicep' = {
+  name: 'aca'
+  params: {
+    location: location
+    resourceToken: resourceToken
+    environmentName: environmentName
+    openaiEndpoint: openai.outputs.AZURE_OPENAI_ENDPOINT
+    // API key auth (current); future iteration will use managed identity
+    openaiKey: openaiAccount.listKeys().key1
+    openaiDeploymentName: openai.outputs.AZURE_OPENAI_GPT_DEPLOYMENT_NAME
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Outputs (consumed by azd)
+// ---------------------------------------------------------------------------
+output AZURE_LOCATION string = location
+output AZURE_OPENAI_ENDPOINT string = openai.outputs.AZURE_OPENAI_ENDPOINT
+output AZURE_OPENAI_NAME string = openai.outputs.AZURE_OPENAI_NAME
+output AZURE_OPENAI_GPT_DEPLOYMENT_NAME string = openai.outputs.AZURE_OPENAI_GPT_DEPLOYMENT_NAME
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = aca.outputs.AZURE_CONTAINER_REGISTRY_ENDPOINT
+output AZURE_CONTAINER_REGISTRY_NAME string = aca.outputs.AZURE_CONTAINER_REGISTRY_NAME
+output CONTAINER_APP_FQDN string = aca.outputs.CONTAINER_APP_FQDN

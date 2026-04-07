@@ -1,0 +1,11 @@
+name: openclaw-azure
+metadata:
+  template: openclaw-azure@0.0.1
+  description: OpenClaw AI assistant on Azure Container Apps with Azure OpenAI (v1 API)
+
+services:
+  openclaw:
+    host: containerapp
+    project: ./src
+    docker:
+      path: Dockerfile
