@@ -141,6 +141,28 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('1.0')
             memory: '2Gi'
           }
+          // Startup probe: give OpenClaw up to 5 min to boot (token acquisition + gateway init)
+          probes: [
+            {
+              type: 'Startup'
+              tcpSocket: {
+                port: 18789
+              }
+              initialDelaySeconds: 10
+              periodSeconds: 5
+              failureThreshold: 60
+              timeoutSeconds: 3
+            }
+            {
+              type: 'Liveness'
+              tcpSocket: {
+                port: 18789
+              }
+              periodSeconds: 30
+              failureThreshold: 3
+              timeoutSeconds: 3
+            }
+          ]
           env: [
             {
               name: 'OPENAI_BASE_URL'
@@ -171,7 +193,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 0
+        minReplicas: 1
         maxReplicas: 1
       }
     }

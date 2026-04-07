@@ -14,8 +14,8 @@ OpenClaw is powerful but runs arbitrary code, downloads instructions from the in
 | **Nuke & pave** | Reinstall OS | Delete VM, recreate | `msftclaw down && msftclaw up` (~1 min) |
 | **Credentials** | ❌ Your real creds on disk | ⚠️ API keys on VM | ✅ Managed identity — no keys anywhere |
 | **State backup** | Manual | Manual | ✅ Azure Files (automatic, separate from compute) |
-| **Always on** | ❌ Only when laptop open | ✅ But you pay 24/7 | ✅ Scale-to-zero ($0 when idle) |
-| **Cost** | Your hardware | ~$50-100/mo | Pay per use |
+| **Always on** | ❌ Only when laptop open | ✅ But you pay 24/7 | ✅ Always on (1 replica). Scale to 0 with `msftclaw stop` when not needed |
+| **Cost** | Your hardware | ~$50-100/mo | ~$2-5/day when running, $0 when stopped |
 
 ## Quick start
 
