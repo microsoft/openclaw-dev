@@ -45,9 +45,8 @@ module openai 'br/public:avm/res/cognitive-services/account:0.13.2' = {
       defaultAction: 'Allow'
       bypass: 'AzureServices'
     }
-    // API key auth enabled for current iteration
-    // TODO (future): set disableLocalAuth: true once managed identity is wired
-    disableLocalAuth: false
+    // Disable API key auth — managed identity only (keyless)
+    disableLocalAuth: true
     // Assign Cognitive Services User role to the deploying user for keyless (EntraID) access
     roleAssignments: !empty(principalId) ? [
       {
