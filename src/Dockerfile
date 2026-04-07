@@ -1,12 +1,14 @@
 FROM node:24-slim
 
 # Install OpenClaw and fix missing bundled-plugin dependencies
-# OpenClaw's bundled channel plugins (Discord, Feishu, Slack, etc.) require packages
-# that aren't declared in package.json. Running npm install inside the module dir
-# resolves all transitive deps from the lockfile.
+# The published package-lock.json makes npm think all deps are installed,
+# but bundled channel plugins need packages not in the dependency tree.
+# Deleting the lockfile forces npm to resolve everything fresh.
 # See: https://github.com/openclaw/openclaw/issues/62749
 RUN npm install -g openclaw@latest && \
-    cd /usr/local/lib/node_modules/openclaw && npm install 2>/dev/null || true
+    cd /usr/local/lib/node_modules/openclaw && \
+    rm -f package-lock.json && \
+    npm install 2>/dev/null || true
 
 # Create directories for config and state
 RUN mkdir -p /root/.openclaw /mnt/state /opt/openclaw-auth
