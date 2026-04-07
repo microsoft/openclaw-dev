@@ -2,19 +2,20 @@
 
 > **Alpha Sample** — This is an experimental reference implementation showing how to host [OpenClaw](https://github.com/openclaw/openclaw) on Azure. It is provided as-is with no security, safety, or production-readiness guarantees. Use at your own risk. Review all infrastructure, authentication, and network configurations before deploying in any environment with sensitive data. This sample has not been through a formal security review.
 
-Run [OpenClaw](https://github.com/openclaw/openclaw) — the open-source personal AI assistant — hosted in Azure. No local machine needed. No API keys to manage. Scales to zero when idle. Just your assistant, ready when you are.
+Run [OpenClaw](https://github.com/openclaw/openclaw) — the open-source personal AI assistant — hosted in an isolated Azure container. No tenant-joined machine needed. No API keys to manage. Scales to zero when idle. Nuke-and-pave in one command.
 
-## Why host OpenClaw in the cloud?
+## Why host OpenClaw in the cloud instead of your machine?
 
-| | Local (Mac/PC) | Cloud (this template) |
-|---|---|---|
-| **Availability** | Only when your machine is on | Always on — scales to zero when idle |
-| **API keys** | You manage and rotate them | Zero keys — managed identity with auto-refreshing Entra ID tokens |
-| **State** | Lost if disk fails | Persisted on Azure Files — survives restarts, upgrades, crashes |
-| **Channels** | Work when your machine is awake | WhatsApp, Telegram, Slack, Discord, Teams always connected |
-| **Cost** | Your hardware | Pay-per-use — $0 when stopped, ~$2-5/day when active |
-| **Cold start** | N/A | Fast — no VNet overhead |
-| **Deploy time** | N/A | ~1 minute with `msftclaw up` |
+OpenClaw is powerful but runs arbitrary code, downloads instructions from the internet, and can be deceived by prompt injection. **Do not run it on your work laptop or any tenant-joined machine.** This template gives you a dedicated, isolated container instead.
+
+| | Your laptop (DON'T) | Dedicated VM (traditional) | This template (ACA) |
+|---|---|---|---|
+| **Isolation** | ❌ Shares your credentials | ✅ Separate VM | ✅ Ephemeral container — no host to compromise |
+| **Nuke & pave** | Reinstall OS | Delete VM, recreate | `msftclaw down && msftclaw up` (~1 min) |
+| **Credentials** | ❌ Your real creds on disk | ⚠️ API keys on VM | ✅ Managed identity — no keys anywhere |
+| **State backup** | Manual | Manual | ✅ Azure Files (automatic, separate from compute) |
+| **Always on** | ❌ Only when laptop open | ✅ But you pay 24/7 | ✅ Scale-to-zero ($0 when idle) |
+| **Cost** | Your hardware | ~$50-100/mo | Pay per use |
 
 ## Quick start
 
@@ -29,7 +30,7 @@ cd openclaw
 .\msftclaw.cmd up
 ```
 
-That's it. The CLI handles Azure login, infrastructure provisioning, container build, and deployment.
+The CLI handles Azure login, infrastructure provisioning, container build, and deployment.
 
 ## CLI commands
 
@@ -37,61 +38,56 @@ That's it. The CLI handles Azure login, infrastructure provisioning, container b
 msftclaw up         Deploy OpenClaw to Azure
 msftclaw test       Verify it's working
 msftclaw teams      Set up Microsoft Teams integration
-msftclaw start      Start the agent
-msftclaw stop       Stop the agent (state preserved, $0 charges)
+msftclaw start      Start the agent (scale to 1)
+msftclaw stop       Stop the agent (scale to 0, state preserved, $0)
 msftclaw restart    Restart the agent
 msftclaw status     Check agent status
 msftclaw logs       Stream live logs
 msftclaw deploy     Rebuild and deploy after code changes
-msftclaw down       Delete all Azure resources
+msftclaw down       Delete ALL Azure resources (nuke & pave)
 msftclaw login      Switch Azure account
 ```
 
 ## Testing your deployment
 
-After `msftclaw up`, run `msftclaw test` to verify the deployment. Then test the agent:
-
 ```bash
 # Check status
 msftclaw status
 
-# Open a shell in the container
+# Shell into the container
 az containerapp exec --name <app-name> --resource-group <rg> --command /bin/bash
 
-# Inside the container — test the agent
+# Inside the container:
 openclaw agent --message "Hello from the Microsoft Cloud!"
-
-# Verify managed identity auth
-echo "Auth: $AZURE_OPENAI_AUTH"
-echo "Endpoint: $OPENAI_BASE_URL"
+echo "Auth: $AZURE_OPENAI_AUTH"       # → managed-identity
+echo "Endpoint: $OPENAI_BASE_URL"     # → https://<resource>.openai.azure.com/openai/v1/
 ```
 
 ## What can I do with this?
 
-Your own **always-on AI assistant** — accessible from Microsoft Teams on your phone, laptop, or any device with your work profile.
+Your own **always-on AI assistant** in an isolated container — accessible from Teams on your phone or any messaging channel.
 
-### Personal productivity (try these first)
+### Try these first
 
-- **"Summarize my meeting notes"** — paste transcripts via Teams DM, get structured action items back
-- **"Draft a reply to this email"** — send the email thread, get a polished response
+- **"Summarize my meeting notes"** — paste transcripts via Teams DM, get structured action items
+- **"Draft a reply to this email"** — send the thread, get a polished response
 - **"Explain this error log"** — paste a stack trace, get a plain-English diagnosis
 - **"Research this topic"** — get a structured brief with web search and citations
 
-### Enterprise workflows (natural next steps)
+### Enterprise workflows
 
 - **PR review assistant** — paste a PR link in Teams, get code quality and security feedback
 - **Teams auto-support** — point the agent at a support channel, it handles common questions
-- **Document drafting** — "Write a one-pager on X for my VP" — iterates until you're satisfied
+- **Document drafting** — "Write a one-pager on X for my VP"
 - **Weekly status reports** — the agent tracks your sessions, so "write my weekly status" works
 
-### Why Teams + mobile works well
+### Teams + mobile
 
 OpenClaw has a [bundled MS Teams plugin](https://docs.openclaw.ai/channels/msteams). Set it up with `msftclaw teams`:
 
-- **DM the bot from Teams desktop or mobile** — works on your phone's work profile
-- **Add it to a team channel** — the agent responds when @mentioned
-- **Adaptive Cards** — polls, structured responses, and interactive cards
-- **File handling** — send documents via Teams DM, the agent processes them
+- DM the bot from Teams desktop or mobile (works on your phone's work profile)
+- Add it to a team channel — the agent responds when @mentioned
+- Adaptive Cards, polls, file handling
 
 ### What works vs. desktop
 
@@ -101,53 +97,102 @@ OpenClaw has a [bundled MS Teams plugin](https://docs.openclaw.ai/channels/mstea
 | Teams / Slack / Discord / Telegram | ✅ Always connected | ⚠️ Only when machine is on |
 | Browser automation | ✅ (headless Chromium) | ✅ |
 | Code execution | ✅ | ✅ |
-| Skills + workspace | ✅ (persisted on Azure Files) | ✅ |
+| Skills + workspace | ✅ (Azure Files) | ✅ |
 | Scale to zero | ✅ ($0 when idle) | N/A |
-| Camera / screen capture / notifications | ❌ (pair a device node) | ✅ |
-| Voice Wake / Talk Mode | ❌ (pair an iOS/Android node) | ✅ |
+| Camera / screen / notifications | ❌ | ✅ |
+| Voice Wake / Talk Mode | ❌ | ✅ |
 
 ## Security
 
-No API keys. No secrets to rotate. Authentication is managed identity only.
+### How this template addresses the core risks
+
+OpenClaw runs arbitrary code and can be deceived by prompt injection. This template mitigates the major risks:
+
+| Risk | Mitigation |
+|---|---|
+| **"Don't run on your work laptop"** | ✅ Runs in an isolated ACA container — not on any tenant-joined machine. No access to your host, credentials, or corporate network |
+| **"Machine gets compromised"** | ✅ Container is ephemeral. `msftclaw down` destroys everything. `msftclaw up` rebuilds from source in ~1 min. No persistent OS to compromise |
+| **"API keys get stolen"** | ✅ No API keys exist anywhere. `disableLocalAuth: true` on Azure OpenAI. Managed identity with short-lived Entra ID tokens only |
+| **"Back up and nuke often"** | ✅ State is on Azure Files (separate from compute). `msftclaw down && msftclaw up` nukes the container and redeploys with state intact |
+| **"Credentials on disk"** | ✅ No credentials stored in the container. Managed identity is injected by the platform. Azure Files mount key is an ACA-managed secret |
+| **"Download random instructions"** | ⚠️ OpenClaw skills can still download and execute code. Be selective about which skills you install (see guidelines below) |
+| **"Prompt injection / memory poisoning"** | ⚠️ OpenClaw is susceptible to these attacks. Back up your workspace regularly and restore from a known good state if behavior changes |
+
+### Security controls in this template
 
 | Layer | Control |
 |---|---|
+| **Gateway access** | `gateway.auth.mode: "password"` — all API, WebChat, and Control UI access requires a password |
 | **Azure OpenAI** | `disableLocalAuth: true` — no API keys exist; only Entra ID tokens work |
 | **Auth** | Managed identity + `getBearerTokenProvider` — auto-refreshing, short-lived JWT tokens |
-| **RBAC** | `Cognitive Services User` scoped to the specific Azure OpenAI resource |
-| **OpenClaw** | `dmPolicy: "pairing"` — unknown senders are blocked until approved |
-| **Transport** | HTTPS/TLS on Microsoft backbone between all services |
-| **Container** | Runs as a single container with no elevated privileges |
-| **Storage** | TLS 1.2 minimum; shared key access for Azure Files volume mount |
+| **RBAC** | `Cognitive Services User` scoped to a single Azure OpenAI resource |
+| **Channel auth** | `dmPolicy: "pairing"` — unknown senders on Teams/Telegram/etc. blocked until approved |
+| **Transport** | HTTPS/TLS between all services |
+| **Compute** | Ephemeral container — no persistent OS, no SSH, no host access |
+| **State** | Azure Files — separated from compute, survives nuke-and-pave |
+
+### Setting your gateway password
+
+After deployment, set the password:
+
+```bash
+az containerapp exec --name <app-name> --resource-group <rg> --command /bin/bash
+
+# Inside the container
+openclaw gateway set-password
+```
+
+### Usage guidelines (important)
+
+Following the spirit of enterprise security guidance for OpenClaw:
+
+1. **Do NOT enter confidential data** — do not paste proprietary code, customer data, financial information, or anything classified into OpenClaw. The LLM backend processes your input and the data flows through the model
+2. **Do NOT install sensitive-credential skills** — do not install skills that require access to email, Microsoft login, bank accounts, or internal APIs
+3. **Be thoughtful about channels** — if connecting to Microsoft Teams, understand that conversation data flows through the OpenClaw gateway and Azure OpenAI. Use an ephemeral or non-production tenant if possible. For lower risk, use WhatsApp, Discord, or Signal instead
+4. **Back up your workspace** — Azure Files persists state automatically, but you should periodically snapshot your workspace to a known good state:
+   ```bash
+   # Download current state
+   az storage file download-batch --source openclaw-state --destination ./backup --account-name <storage-account>
+   ```
+5. **Nuke and pave regularly** — if the agent behaves strangely (signs of memory poisoning or prompt injection), destroy and redeploy:
+   ```bash
+   msftclaw down    # destroy everything
+   msftclaw up      # redeploy fresh from source
+   # Then restore workspace from your last known-good backup
+   ```
+6. **Monitor the logs** — watch for unexpected behavior:
+   ```bash
+   msftclaw logs
+   ```
 
 ### Known considerations
 
-- **Public ingress** — the ACA container app has a public FQDN. The OpenClaw gateway itself handles authentication via its pairing mode, but the HTTP endpoint is reachable. For network isolation, see the [VNet isolation](#advanced-vnet-isolation) section.
-- **ACR admin credentials** — the container registry uses admin user/password (stored as ACA secrets) for image pull. Consider switching to managed identity-based ACR pull for production.
-- **Storage shared key** — Azure Files volume mount uses a storage account key (required by ACA). The key is stored as an ACA-managed secret, not in code.
-- **Container runs as root** — the default `node:24-slim` image runs as root. For hardened deployments, add a non-root user to the Dockerfile.
-- **No WAF or rate limiting** — there is no Azure Application Gateway, Front Door, or rate limiting in front of the container app. OpenClaw's built-in pairing provides application-level auth, but there is no DDoS protection beyond ACA's defaults.
-
-> This is an alpha sample. Review and harden these areas before using with sensitive data or in a production environment.
+- **Public FQDN** — the container app has a public URL. Gateway password auth protects all endpoints, but the FQDN is discoverable. For additional protection, add Azure Front Door with WAF or configure Entra ID Easy Auth on the ACA ingress
+- **ACR admin credentials** — uses admin user/password for image pull (stored as ACA secrets). Consider managed identity-based ACR pull for hardened deployments
+- **Storage shared key** — Azure Files mount requires a storage account key (ACA limitation). Stored as an ACA-managed secret, not in code
+- **Container runs as root** — the `node:24-slim` base image runs as root. Add a non-root user for hardened deployments
+- **No WAF or rate limiting** — no Azure Front Door or Application Gateway. Gateway password auth is the access gate
+- **Skills can run arbitrary code** — OpenClaw skills execute in the container. A malicious skill can access the container's managed identity. Only install skills you trust
 
 ## Troubleshooting
 
 | Issue | Cause | Fix |
 |---|---|---|
-| `msftclaw test` shows "Activating" | Container is starting up | Wait 1-2 minutes and retry |
-| `ActivationFailed` status | Container entrypoint crashed | Run `msftclaw logs` — common cause: CRLF line endings (fixed in Dockerfile with `sed -i 's/\r$//'`) |
-| `ERR_MODULE_NOT_FOUND: @azure/identity` | Node.js ESM can't find packages installed globally | Dockerfile installs `@azure/identity` locally in `/opt/openclaw-auth/` alongside `token-refresh.mjs` |
-| Pre-flight warning about `roleAssignments/write` | azd checks permissions before deploying | Type `Y` to proceed — the warning is advisory only |
-| `disableLocalAuth` prevents `list-keys` | No API keys exist by design | Expected — managed identity is the only auth method |
-| Logs show `[auth] Fatal` | Managed identity token acquisition failed | Verify the role: `az role assignment list --scope <openai-resource-id>` |
-| Docker build uses cached image | `azd deploy` reuses Docker cache | Force rebuild: `docker build --no-cache -t <tag> ./src` |
-| State lost after restart | Azure Files mount issue | Check volume config in `az containerapp show` |
-| Container scaled to zero, not responding | Scale-to-zero is active | Run `msftclaw start` or send a request — ACA scales up automatically on HTTP traffic |
+| `msftclaw test` shows "Activating" | Container starting up | Wait 1-2 minutes and retry |
+| `ActivationFailed` | Entrypoint crashed | Run `msftclaw logs` — common: CRLF line endings (fixed with `sed` in Dockerfile) |
+| `ERR_MODULE_NOT_FOUND: @azure/identity` | ESM can't find global packages | Dockerfile installs locally in `/opt/openclaw-auth/` |
+| `Cannot find module '@buape/carbon'` | OpenClaw missing peer dependency | Dockerfile runs `npm install` in openclaw's module dir |
+| Pre-flight `roleAssignments/write` warning | azd permissions check | Type Y — deployment works. Or assign yourself `User Access Administrator` |
+| `disableLocalAuth` prevents `list-keys` | No API keys by design | Expected — managed identity only |
+| `[auth] Fatal` in logs | Token acquisition failed | Verify `Cognitive Services User` role: `az role assignment list --scope <openai-id>` |
+| Docker cache serves old image | `azd deploy` caches | `docker build --no-cache -t <tag> ./src` |
+| Container scaled to 0 | Scale-to-zero active | `msftclaw start` or send HTTP request — ACA scales up automatically |
+| Agent behaves strangely | Possible memory poisoning | Restore workspace from backup or `msftclaw down && msftclaw up` |
 
 ## Clean up
 
 ```bash
-msftclaw down
+msftclaw down    # destroys ALL resources — compute, storage, registry, OpenAI
 ```
 
 ---
@@ -161,10 +206,10 @@ msftclaw down
 
 | Resource | Purpose |
 |---|---|
-| Azure OpenAI (GPT-5-mini) | LLM backend via `/openai/v1` (keyless auth only, `disableLocalAuth: true`) |
-| Azure Container Apps | Hosts the OpenClaw gateway — scale-to-zero enabled |
-| Azure Files | Persists state (credentials, workspace, sessions) across restarts |
-| Azure Container Registry | Stores the custom OpenClaw container image |
+| Azure OpenAI (GPT-5-mini) | LLM backend via `/openai/v1` — keyless only (`disableLocalAuth: true`) |
+| Azure Container Apps | Hosts OpenClaw gateway — scale-to-zero, ephemeral container |
+| Azure Files | Persists state (credentials, workspace, sessions) — separate from compute |
+| Azure Container Registry | Stores the custom container image |
 | Log Analytics | Gateway and container logs |
 
 ### Resource diagram
@@ -178,7 +223,7 @@ graph TB
                     EP["entrypoint.sh"]
                     TR["token-refresh.mjs<br/>@azure/identity"]
                     subgraph RUNTIME["OpenClaw Runtime"]
-                        GW["🦞 OpenClaw Gateway :18789"]
+                        GW["🦞 OpenClaw Gateway :18789<br/>password auth enabled"]
                         TEAMS_PLUGIN["Teams Plugin :3978"]
                         SDK["OpenAI Node.js SDK"]
                     end
@@ -216,17 +261,6 @@ graph TB
 
     USER["👤 User<br/>Teams DM / @mention"]
     USER --> TEAMS
-```
-
-### How Azure OpenAI integration works
-
-OpenClaw natively uses the OpenAI Node.js SDK. The container sets `OPENAI_BASE_URL` to the Azure OpenAI v1 endpoint. Authentication uses `getBearerTokenProvider` from `@azure/identity` ([same pattern as the Azure OpenAI Starter Kit](https://github.com/Azure-Samples/azure-openai-starter/blob/main/src/typescript/responses_example_entra.ts)):
-
-```js
-const credential = new DefaultAzureCredential();
-const tokenProvider = getBearerTokenProvider(credential,
-    "https://cognitiveservices.azure.com/.default");
-const token = await tokenProvider();
 ```
 
 ### Auth flow
@@ -273,12 +307,12 @@ src/
   Dockerfile                # Container image (node:24-slim + openclaw + @azure/identity)
   entrypoint.sh             # State restore/save + gateway launch
   token-refresh.mjs         # Managed identity → bearer token for OpenAI SDK
-  openclaw.json             # Agent config (model: openai/gpt-5-mini)
+  openclaw.json             # Agent config (model + gateway password auth)
 
 infra/
   main.bicep                # Top-level orchestration
   main.parameters.json      # azd parameter bindings
-  resources.bicep           # Azure OpenAI resource
+  resources.bicep           # Azure OpenAI resource (disableLocalAuth: true)
   aca.bicep                 # ACA environment, storage, container app, RBAC
 
 teams/
