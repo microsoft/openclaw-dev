@@ -41,8 +41,10 @@ module openai 'br/public:avm/res/cognitive-services/account:0.13.2' = {
     kind: 'OpenAI'
     sku: sku
     customSubDomainName: 'openai-${resourceToken}'
+    // Deny all public network access — only reachable via private endpoint in the VNet
+    publicNetworkAccess: 'Disabled'
     networkAcls: {
-      defaultAction: 'Allow'
+      defaultAction: 'Deny'
       bypass: 'AzureServices'
     }
     // Disable API key auth — managed identity only (keyless)
