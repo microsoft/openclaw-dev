@@ -1,93 +1,147 @@
-# OpenClaw on Azure
+# 🦞 OpenClaw in the Microsoft Cloud
 
-azd template that deploys [OpenClaw](https://github.com/openclaw/openclaw) on Azure Container Apps with Azure OpenAI (v1 API).
+Run [OpenClaw](https://github.com/openclaw/openclaw) — the open-source personal AI assistant — hosted in a secure, always-on Azure sandbox. No local machine needed. No API keys to manage. Just your assistant, running 24/7 in your own cloud.
 
-## Architecture
+## Why host OpenClaw in the cloud?
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Azure Resource Group                        │
-│                                                                    │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │              Azure Container Apps Environment                │   │
-│  │                                                              │   │
-│  │  ┌────────────────────────────────────────────────────────┐  │   │
-│  │  │           Container App (openclaw)                      │  │   │
-│  │  │           System-Assigned Managed Identity              │  │   │
-│  │  │                                                        │  │   │
-│  │  │  ┌──────────────────┐    ┌──────────────────────────┐  │  │   │
-│  │  │  │ token-refresh.mjs│    │   OpenClaw Gateway       │  │  │   │
-│  │  │  │                  │───▶│   (openclaw gateway)     │  │  │   │
-│  │  │  │ @azure/identity  │    │                          │  │  │   │
-│  │  │  │ getBearerToken-  │    │   OpenAI Node.js SDK     │  │  │   │
-│  │  │  │   Provider()     │    │   OPENAI_BASE_URL ──────────────┐  │
-│  │  │  └──────────────────┘    │   OPENAI_API_KEY=token  │  │  ││  │
-│  │  │           │              └──────────────────────────┘  │  ││  │
-│  │  │           │ Entra ID token                             │  ││  │
-│  │  └───────────┼────────────────────────────────────────────┘  ││  │
-│  │              │         ┌────────────────────┐                ││  │
-│  │              │         │   Azure Files      │                ││  │
-│  │              │         │   /mnt/state       │                ││  │
-│  │              │         │   • credentials    │                ││  │
-│  │              │         │   • workspace      │                ││  │
-│  │              │         │   • sessions       │                ││  │
-│  │              │         └────────────────────┘                ││  │
-│  └──────────────┼───────────────────────────────────────────────┘│  │
-│                 │                                                │  │
-│                 │ DefaultAzureCredential                         │  │
-│                 │ (managed identity)                             │  │
-│                 ▼                                                ▼  │
-│  ┌──────────────────────────┐     ┌─────────────────────────────┐  │
-│  │      Microsoft Entra ID  │     │     Azure OpenAI            │  │
-│  │                          │     │     (disableLocalAuth: true) │  │
-│  │  Token:                  │     │                             │  │
-│  │  cognitiveservices       │     │     /openai/v1/             │  │
-│  │    .azure.com/.default   │     │     GPT-5-mini deployment  │  │
-│  └──────────────────────────┘     │                             │  │
-│                                   │  Cognitive Services User    │  │
-│                                   │  role ◀── Container App MI  │  │
-│                                   └─────────────────────────────┘  │
-│                                                                    │
-│  ┌──────────────────────────┐     ┌─────────────────────────────┐  │
-│  │  Azure Container Registry│     │     Log Analytics           │  │
-│  │  (openclaw image)        │     │     (gateway logs)          │  │
-│  └──────────────────────────┘     └─────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
+| | Local (Mac/PC) | Cloud (this template) |
+|---|---|---|
+| **Availability** | Only when your machine is on | Always on, 24/7 |
+| **Security** | Runs with your user permissions | Network-isolated VNet sandbox — no public internet access |
+| **API keys** | You manage and rotate them | Zero keys — managed identity with auto-refreshing Entra ID tokens |
+| **State** | Lost if disk fails | Persisted on Azure Files — survives restarts, upgrades, crashes |
+| **Channels** | Work when your machine is awake | WhatsApp, Telegram, Slack, Discord always connected |
+| **Cost** | Your hardware | ~$2-5/day on Azure (stop anytime with `msftclaw stop`) |
+
+## Quick start
+
+```bash
+git clone https://github.com/microsoft/openclaw
+cd openclaw
+
+# macOS/Linux/WSL
+./msftclaw up
+
+# Windows (cmd or PowerShell)
+.\msftclaw.cmd up
 ```
 
-### Configuration & SDK flow
+That's it. The CLI handles Azure login, infrastructure provisioning, container build, and deployment.
+
+## CLI commands
 
 ```
-openclaw.json                      Environment Variables
-┌─────────────────────┐            ┌──────────────────────────────────────────────┐
-│ {                   │            │ OPENAI_BASE_URL=https://<res>.openai.azure   │
-│   "agent": {        │            │   .com/openai/v1/                            │
-│     "model":        │            │ OPENAI_API_KEY=<Entra ID bearer token>       │
-│       "openai/      │            │ AZURE_OPENAI_AUTH=managed-identity           │
-│        gpt-5-mini"  │            └──────────────┬───────────────────────────────┘
-│   }                 │                           │
-│ }                   │                           ▼
-└────────┬────────────┘            ┌──────────────────────────────────────────────┐
-         │                         │         OpenAI Node.js SDK (openai)          │
-         │ model selection         │                                              │
-         └────────────────────────▶│  new OpenAI({                               │
-                                   │    baseURL: process.env.OPENAI_BASE_URL,    │
-                                   │    apiKey:  process.env.OPENAI_API_KEY      │
-                                   │  })                                         │
-                                   └──────────────┬───────────────────────────────┘
-                                                  │
-                                                  │ HTTPS (bearer token in header)
-                                                  ▼
-                                   ┌──────────────────────────────────────────────┐
-                                   │  Azure OpenAI  /openai/v1/                  │
-                                   │  ┌──────────────────────────────────────┐    │
-                                   │  │ gpt-5-mini (GlobalStandard)         │    │
-                                   │  │ OpenAI-compatible chat/responses API│    │
-                                   │  └──────────────────────────────────────┘    │
-                                   └──────────────────────────────────────────────┘
+msftclaw up         Deploy OpenClaw to Azure
+msftclaw test       Verify it's working
+msftclaw start      Start the agent
+msftclaw stop       Stop the agent (state preserved, no charges)
+msftclaw restart    Restart the agent
+msftclaw status     Check agent status
+msftclaw logs       Stream live logs
+msftclaw deploy     Rebuild and deploy after code changes
+msftclaw down       Delete all Azure resources
+msftclaw login      Switch Azure account
 ```
 
-### Auth flow (keyless)
+## Testing your deployment
+
+After `msftclaw up`, run `msftclaw test` to verify the infrastructure is healthy. Then open the Azure Portal Console to interact with the agent:
+
+1. **Portal** → Container Apps → your app → **Console**
+2. Select `/bin/bash`
+3. Run:
+
+```bash
+# Health check
+curl -s http://localhost:18789/api/health
+
+# Send a test message
+openclaw agent --message "Hello from the Microsoft Cloud!"
+
+# Verify managed identity auth
+echo "Auth: $AZURE_OPENAI_AUTH"
+echo "Endpoint: $OPENAI_BASE_URL"
+```
+
+## Hero scenario: cloud dev environment
+
+OpenClaw hosted in a secure Azure sandbox is ideal as a **cloud-based development tool**:
+
+- **Always-on assistant for dev teams** — pair it with GitHub, Slack, or Teams channels so your team has a persistent AI assistant that never goes offline, even when everyone's laptop is closed
+- **Secure sandbox for experimentation** — the VNet-isolated environment means OpenClaw can run tools, browse, and execute code in a sandbox where mistakes can't leak to the internet
+- **Shared workspace** — Azure Files persistence means session history, skills, and workspace files survive across restarts — your team picks up where they left off
+- **Multi-channel bot** — connect WhatsApp, Telegram, Discord, Slack, Teams etc. to a single always-on gateway — no need to keep a Mac Mini running at home
+
+**What it can do vs. desktop:** The cloud sandbox runs OpenClaw's full gateway, agent, CLI, and channel integrations. It can do everything a desktop install does *except* device-local actions (camera, screen recording, system notifications) — those require pairing a macOS/iOS/Android node to the cloud gateway via `node.invoke`.
+
+## Security
+
+Everything is network-isolated. Nothing is accessible from the public internet.
+
+| Layer | Control |
+|---|---|
+| **Network** | VNet with private endpoints — all traffic stays internal |
+| **ACA** | `internal: true` — no public FQDN |
+| **Azure OpenAI** | `publicNetworkAccess: Disabled`, `disableLocalAuth: true` |
+| **Storage** | `publicNetworkAccess: Disabled` — state files only via private endpoint |
+| **Auth** | Managed identity + `getBearerTokenProvider` — auto-refreshing Entra ID tokens |
+| **RBAC** | `Cognitive Services User` scoped to the specific Azure OpenAI resource |
+
+## Troubleshooting
+
+| Issue | Cause | Fix |
+|---|---|---|
+| `msftclaw test` shows "Activating" | Container is pulling the image for the first time | Wait 1-2 minutes and retry |
+| `ActivationFailed` status | Container entrypoint crashed | Run `msftclaw logs` — common cause: CRLF line endings (fixed in current Dockerfile with `sed -i 's/\r$//'`) |
+| `ERR_MODULE_NOT_FOUND: @azure/identity` | Node.js ESM can't find packages installed globally | The Dockerfile installs `@azure/identity` locally in `/opt/openclaw-auth/` alongside `token-refresh.mjs` — ESM resolves from the file's directory |
+| `az containerapp exec` SSL error | The ACA environment is internal-only (VNet-isolated) | Use Azure Portal Console instead: Portal → Container App → Console → `/bin/bash` |
+| Can't access the gateway FQDN in browser | FQDN is `.internal.*` — not publicly routable | Connect via VPN, Bastion, or Portal Console. This is the security hardening working correctly |
+| Pre-flight warning about `roleAssignments/write` | azd checks permissions before deploying | Type `Y` to proceed — the deployment works. The warning is advisory only |
+| `disableLocalAuth` prevents `list-keys` | No API keys exist by design | This is expected — managed identity is the only auth method |
+| Logs show `[auth] Fatal` | Managed identity token acquisition failed | Verify the `Cognitive Services User` role is assigned: `az role assignment list --scope <openai-resource-id>` |
+| Docker build uses cached (broken) image | `azd deploy` reuses Docker cache | Force rebuild: `docker build --no-cache -t <tag> ./src` then push and update |
+| State lost after restart | Azure Files mount not working | Check `az containerapp show` for volume mount config — verify the storage account and file share exist |
+| WORKDIR changes in Dockerfile break paths | Node.js ESM resolves imports from the file's location, not CWD | Place `.mjs` files in the same directory as their `node_modules` |
+
+## Clean up
+
+```bash
+msftclaw down
+```
+
+---
+
+## Advanced: architecture
+
+<details>
+<summary>Click to expand full architecture details</summary>
+
+### What's deployed
+
+| Resource | Purpose |
+|---|---|
+| Virtual Network | Network isolation — all resources communicate via private endpoints |
+| Azure OpenAI (GPT-5-mini) | LLM backend via `/openai/v1` (public access disabled, keyless only) |
+| Azure Container Apps (internal) | Hosts the OpenClaw gateway — no public ingress |
+| Azure Files | Persists state (credentials, workspace, sessions) across restarts |
+| Azure Container Registry | Stores the custom OpenClaw container image |
+| Private Endpoints + DNS Zones | Azure OpenAI and Storage reachable only inside the VNet |
+| Log Analytics | Gateway and container logs |
+
+### How Azure OpenAI integration works
+
+OpenClaw natively uses the OpenAI Node.js SDK. The container sets `OPENAI_BASE_URL` to the Azure OpenAI v1 endpoint. Authentication uses `getBearerTokenProvider` from `@azure/identity` ([same pattern as the Azure OpenAI Starter Kit](https://github.com/Azure-Samples/azure-openai-starter/blob/main/src/typescript/responses_example_entra.ts)):
+
+```js
+const credential = new DefaultAzureCredential();
+const tokenProvider = getBearerTokenProvider(credential,
+    "https://cognitiveservices.azure.com/.default");
+const token = await tokenProvider();
+```
+
+The token-refresh wrapper (`src/token-refresh.mjs`) sets the bearer token as `OPENAI_API_KEY`, spawning OpenClaw with it. A periodic refresh (every 45 min) keeps tokens fresh.
+
+### Auth flow
 
 ```
 Container App                    Entra ID                    Azure OpenAI
@@ -120,202 +174,48 @@ Container App                    Entra ID                    Azure OpenAI
      │                              │                             │
 ```
 
-## What's deployed
-
-| Resource | Purpose |
-|---|---|
-| Virtual Network | Network isolation — all resources communicate via private endpoints |
-| Azure OpenAI (GPT-5-mini) | LLM backend via `/openai/v1` (public access disabled, keyless auth only) |
-| Azure Container Apps (internal) | Hosts the OpenClaw gateway — no public ingress |
-| Azure Files | Persists OpenClaw state (credentials, workspace, sessions) across restarts |
-| Azure Container Registry | Stores the custom OpenClaw container image |
-| Private Endpoints + DNS Zones | Azure OpenAI and Storage reachable only inside the VNet |
-| Log Analytics | Gateway and container logs |
-
-## Quick start
+### Managing the agent
 
 ```bash
-az login && azd auth login
-azd up
+# Stop (scale to 0 — no compute charges, state preserved)
+msftclaw stop
+
+# Start (scale back to 1 — state restored from Azure Files)
+msftclaw start
+
+# Restart (new revision, same config)
+msftclaw restart
+
+# Check status
+msftclaw status
+
+# Stream logs
+msftclaw logs
+
+# Redeploy after code changes
+msftclaw deploy
 ```
 
-The OpenClaw gateway will be available at the FQDN printed in the output.
+### Project structure
 
-## How the Azure OpenAI integration works
+```
+msftclaw                    # Bash CLI (macOS/Linux/WSL)
+msftclaw.cmd                # Windows CLI (cmd/PowerShell)
+azure.yaml                  # azd service definition
 
-OpenClaw natively uses the OpenAI Node.js SDK. The container app sets `OPENAI_BASE_URL` to point at the Azure OpenAI v1 endpoint:
+src/
+  Dockerfile                # Container image (node:24-slim + openclaw + @azure/identity)
+  entrypoint.sh             # State restore/save + gateway launch
+  token-refresh.mjs         # Managed identity → bearer token for OpenAI SDK
+  openclaw.json             # Agent config (model: openai/gpt-5-mini)
 
-- `OPENAI_BASE_URL` → `https://<resource>.openai.azure.com/openai/v1/`
+infra/
+  main.bicep                # Top-level orchestration
+  main.parameters.json      # azd parameter bindings
+  resources.bicep           # Azure OpenAI resource
+  aca.bicep                 # VNet, ACA, storage, private endpoints, RBAC
 
-Authentication is **fully keyless** via managed identity, using the same pattern as the [Azure OpenAI Starter Kit](https://github.com/Azure-Samples/azure-openai-starter/blob/main/src/typescript/responses_example_entra.ts):
-
-```js
-const credential = new DefaultAzureCredential();
-const tokenProvider = getBearerTokenProvider(credential,
-    "https://cognitiveservices.azure.com/.default");
-const token = await tokenProvider();
+validate.sh                 # Automated validation script
 ```
 
-The token-refresh wrapper (`src/token-refresh.mjs`) calls `getBearerTokenProvider` from `@azure/identity`, sets the returned bearer token as `OPENAI_API_KEY`, then spawns the OpenClaw gateway. The provider handles token caching and auto-refresh internally. A periodic refresh (every 45 min) pushes fresh tokens to the OpenClaw process.
-
-No API keys are created, stored, or rotated — `disableLocalAuth` is set to `true` on the Azure OpenAI resource.
-
-## Security — locked-down sandbox
-
-Every resource in this template is network-isolated. Nothing is accessible from the public internet.
-
-### Security boundaries
-
-| Layer | Control | Effect |
-|---|---|---|
-| **Network** | VNet with private endpoints | All traffic stays inside the VNet — no public internet paths |
-| **ACA Environment** | `internal: true` | Gateway has no public FQDN; only reachable from inside the VNet |
-| **Azure OpenAI** | `publicNetworkAccess: Disabled` | Cannot be called from the internet; only via private endpoint |
-| **Azure Storage** | `publicNetworkAccess: Disabled` | State files only accessible via private endpoint inside the VNet |
-| **Authentication** | `disableLocalAuth: true` | No API keys exist or can be created; Entra ID tokens only |
-| **RBAC** | `Cognitive Services User` | Scoped to the single Azure OpenAI resource; least-privilege |
-| **Token auth** | `getBearerTokenProvider` | Short-lived JWT tokens (∼60 min); auto-refreshed every 45 min |
-| **DNS** | Private DNS zones | `privatelink.openai.azure.com` and `privatelink.file.core.windows.net` resolve inside VNet only |
-
-### How to access the gateway
-
-Since the ACA environment is internal-only, you must connect to the VNet to reach the OpenClaw gateway:
-
-- **VPN Gateway** — connect your machine to the VNet via point-to-site VPN
-- **Azure Bastion** — jump box inside the VNet
-- **`az containerapp exec`** — shell into the running container directly
-- **Tailscale** — OpenClaw supports Tailscale Serve/Funnel natively (configure via `gateway.tailscale.mode` in `openclaw.json`)
-
-## Testing
-
-After deploying with `azd up`, validate via `az containerapp exec`:
-
-```bash
-# Get the container app name
-APP_NAME=$(az containerapp list --resource-group <rg> --query "[0].name" -o tsv)
-
-# Shell into the container
-az containerapp exec --name $APP_NAME --resource-group <rg>
-
-# Inside the container — test the agent
-openclaw agent --message "Say hello in exactly 5 words."
-
-# Verify managed identity auth is active
-echo $AZURE_OPENAI_AUTH   # should print: managed-identity
-echo $OPENAI_BASE_URL     # should print: https://<resource>.openai.azure.com/openai/v1/
-
-# Check state persistence
-ls -la /mnt/state/
-
-# Check gateway health
-curl -s http://localhost:18789/api/health
-```
-
-A full validation script is included at `validate.sh` for automated testing from inside the VNet.
-
-### What to try
-
-1. **Basic agent test** — `openclaw agent --message "Explain what OpenClaw is."` — confirms Azure OpenAI is responding via managed identity
-2. **Session persistence** — send a message, restart the container (`az containerapp revision restart`), send another — the session history should survive via Azure Files
-3. **Verify no API keys** — `az cognitiveservices account list-keys` should fail because `disableLocalAuth: true`
-4. **Check logs** — `az containerapp logs show --name $APP_NAME --resource-group <rg> --follow` — look for `[auth] Obtained Entra ID token via getBearerTokenProvider`
-
-### Sample end-to-end test
-
-Run this from inside the container (`az containerapp exec`) to confirm the full pipeline — managed identity, Azure OpenAI v1, and the OpenClaw agent — works:
-
-```bash
-# 1. Verify the gateway is up
-curl -sf http://localhost:18789/api/health && echo "✅ Gateway healthy" || echo "❌ Gateway down"
-
-# 2. Ask the agent a question (hits Azure OpenAI via managed identity)
-openclaw agent --message "What is 2+2? Reply with just the number."
-# Expected: 4
-
-# 3. Test a multi-turn conversation
-openclaw agent --message "Remember the word 'lobster'."
-openclaw agent --message "What word did I just ask you to remember?"
-# Expected: lobster
-
-# 4. Verify state survives restart — check Azure Files
-ls /mnt/state/sessions/
-# Should show session files after the above conversation
-
-# 5. Verify auth mode
-echo "Auth: $AZURE_OPENAI_AUTH"
-echo "Endpoint: $OPENAI_BASE_URL"
-# Expected: managed-identity, https://<resource>.openai.azure.com/openai/v1/
-```
-
-## Managing the OpenClaw agent
-
-### Stop the agent
-
-Scale the container app to zero replicas — the gateway stops, no compute charges, state is preserved on Azure Files:
-
-```bash
-# Set your resource group and app name
-RG="<your-resource-group>"
-APP_NAME=$(az containerapp list --resource-group $RG --query "[0].name" -o tsv)
-
-# Stop (scale to 0)
-az containerapp update --name $APP_NAME --resource-group $RG \
-    --min-replicas 0 --max-replicas 0
-
-echo "✅ OpenClaw stopped. No compute running."
-```
-
-### Start the agent
-
-Scale back to 1 replica — the entrypoint restores state from Azure Files automatically:
-
-```bash
-# Start (scale to 1)
-az containerapp update --name $APP_NAME --resource-group $RG \
-    --min-replicas 1 --max-replicas 1
-
-echo "✅ OpenClaw started. State restored from Azure Files."
-```
-
-### Restart the agent
-
-Restart the active revision without changing scale — useful after config changes:
-
-```bash
-# Get the active revision
-REVISION=$(az containerapp revision list --name $APP_NAME --resource-group $RG \
-    --query "[?properties.active].name" -o tsv)
-
-# Restart it
-az containerapp revision restart --name $APP_NAME --resource-group $RG \
-    --revision $REVISION
-
-echo "✅ OpenClaw restarted."
-```
-
-### Check status
-
-```bash
-# Running state
-az containerapp show --name $APP_NAME --resource-group $RG \
-    --query "{status: properties.runningStatus, replicas: properties.template.scale}" -o table
-
-# Live logs
-az containerapp logs show --name $APP_NAME --resource-group $RG --follow
-
-# Recent log snapshot
-az containerapp logs show --name $APP_NAME --resource-group $RG --tail 50
-```
-
-### Redeploy after code changes
-
-```bash
-# Rebuild the container image and deploy the new revision
-azd deploy
-```
-
-## Clean up
-
-```bash
-azd down
-```
+</details>

@@ -55,7 +55,7 @@ echo "[openclaw] Auth mode: ${AZURE_OPENAI_AUTH:-api-key}"
 
 if [ "${AZURE_OPENAI_AUTH}" = "managed-identity" ]; then
     echo "[openclaw] Using managed identity (keyless) auth"
-    node /opt/token-refresh.mjs --port 18789 &
+    node /opt/openclaw-auth/token-refresh.mjs --port 18789 &
 else
     openclaw gateway --port 18789 &
 fi
