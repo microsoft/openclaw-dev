@@ -63,16 +63,44 @@ echo "Auth: $AZURE_OPENAI_AUTH"
 echo "Endpoint: $OPENAI_BASE_URL"
 ```
 
-## Hero scenario: cloud dev environment
+## What can I do with this?
 
-OpenClaw hosted in a secure Azure sandbox is ideal as a **cloud-based development tool**:
+This template gives you your own **always-on AI assistant in a secure enterprise sandbox** — accessible from Microsoft Teams on your phone, laptop, or any device with your work profile. Here's what people actually use it for:
 
-- **Always-on assistant for dev teams** — pair it with GitHub, Slack, or Teams channels so your team has a persistent AI assistant that never goes offline, even when everyone's laptop is closed
-- **Secure sandbox for experimentation** — the VNet-isolated environment means OpenClaw can run tools, browse, and execute code in a sandbox where mistakes can't leak to the internet
-- **Shared workspace** — Azure Files persistence means session history, skills, and workspace files survive across restarts — your team picks up where they left off
-- **Multi-channel bot** — connect WhatsApp, Telegram, Discord, Slack, Teams etc. to a single always-on gateway — no need to keep a Mac Mini running at home
+### Personal productivity (try these first)
 
-**What it can do vs. desktop:** The cloud sandbox runs OpenClaw's full gateway, agent, CLI, and channel integrations. It can do everything a desktop install does *except* device-local actions (camera, screen recording, system notifications) — those require pairing a macOS/iOS/Android node to the cloud gateway via `node.invoke`.
+- **"Summarize my meeting notes"** — paste or forward meeting transcripts via Teams DM and get structured action items back
+- **"Draft a reply to this email"** — send the email thread, get a polished response you can copy-paste
+- **"Explain this error log"** — paste a stack trace or error from any system, get a plain-English diagnosis
+- **"Research this topic"** — ask the agent to research a topic with web search and get a structured brief with citations
+
+### Enterprise workflows (natural next steps)
+
+- **PR review assistant** — connect to a Teams channel, paste a PR link, get feedback on code quality and security
+- **Slack/Teams auto-support** — point the agent at a support channel, it responds to common questions and escalates the rest
+- **Document drafting** — "Write a one-pager on X for my VP" — iterates on tone, structure, and content until you're satisfied
+- **Weekly status reports** — the agent remembers your session history, so "write my weekly status" actually works because it's been tracking your conversations
+
+### Why Teams + mobile works well
+
+OpenClaw has a [bundled Microsoft Teams plugin](https://docs.openclaw.ai/channels/msteams) that works with your existing Azure AD / Entra ID tenant. Once configured:
+
+- **DM the bot from Teams desktop or mobile** — works on your phone's work profile, no personal apps needed
+- **Add it to a team channel** — the agent responds when @mentioned, with per-channel tool policies
+- **Adaptive Cards** — the agent can send polls, structured responses, and interactive cards
+- **File handling** — send documents via Teams DM, the agent processes them and responds
+
+### What works vs. desktop
+
+| Capability | Cloud sandbox | Desktop (Mac/PC) |
+|---|---|---|
+| Agent + gateway | ✅ | ✅ |
+| Teams / Slack / Discord / Telegram | ✅ Always connected | ⚠️ Only when machine is on |
+| Browser automation | ✅ (headless Chromium) | ✅ |
+| Code execution | ✅ (sandboxed) | ✅ |
+| Skills + workspace | ✅ (persisted on Azure Files) | ✅ |
+| Camera / screen capture / notifications | ❌ (pair a device node) | ✅ |
+| Voice Wake / Talk Mode | ❌ (pair an iOS/Android node) | ✅ |
 
 ## Security
 
