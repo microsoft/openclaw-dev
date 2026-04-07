@@ -22,16 +22,19 @@ The OpenClaw gateway will be available at the FQDN printed in the output.
 
 ## How the Azure OpenAI integration works
 
-OpenClaw natively uses the OpenAI SDK. The container app sets two environment variables that redirect it to Azure OpenAI's v1 endpoint:
+OpenClaw natively uses the OpenAI SDK. The container app sets `OPENAI_BASE_URL` to point at the Azure OpenAI v1 endpoint:
 
 - `OPENAI_BASE_URL` → `https://<resource>.openai.azure.com/openai/v1/`
-- `OPENAI_API_KEY` → API key from the provisioned Azure OpenAI resource
 
-The pre-configured `src/openclaw.json` sets the model to `openai/gpt-5-mini`, matching the deployed Azure OpenAI model.
+Authentication is **fully keyless** via managed identity. The container app has a system-assigned managed identity with the `Cognitive Services User` role on the Azure OpenAI resource. A lightweight token-refresh wrapper (`src/token-refresh.mjs`) uses `@azure/identity`'s `DefaultAzureCredential` to obtain an Entra ID bearer token, sets it as `OPENAI_API_KEY` for the OpenAI SDK, and refreshes it automatically before expiry.
 
-## Future: managed identity
+No API keys are created, stored, or rotated — `disableLocalAuth` is set to `true` on the Azure OpenAI resource.
 
-The template is structured for a future switch to managed identity (keyless auth). The `TODO` comments in `infra/aca.bicep` show the exact changes: enable system-assigned identity on the container app, assign the Cognitive Services User role, and remove the API key secret.
+## Security
+
+- **No API keys** — managed identity with Entra ID tokens only; `disableLocalAuth: true` on Azure OpenAI
+- **RBAC** — `Cognitive Services User` role scoped to the specific Azure OpenAI resource
+- **Token refresh** — automatic refresh 5 minutes before expiry via `@azure/identity`
 
 ## Clean up
 

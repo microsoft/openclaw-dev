@@ -1,5 +1,6 @@
 // Azure Container Apps infrastructure for OpenClaw
 // Provisions: ACR, Log Analytics, ACA Environment, Azure Files storage, Container App
+// Uses managed identity (keyless) for Azure OpenAI access
 
 param location string
 param resourceToken string
@@ -8,12 +9,11 @@ param environmentName string
 @description('Azure OpenAI endpoint (e.g. https://<name>.openai.azure.com/)')
 param openaiEndpoint string
 
-@secure()
-@description('Azure OpenAI API key')
-param openaiKey string
-
 @description('Azure OpenAI model deployment name')
 param openaiDeploymentName string
+
+@description('Azure OpenAI resource ID (for role assignment scoping)')
+param openaiResourceId string
 
 // ---------------------------------------------------------------------------
 // Azure Container Registry
@@ -94,15 +94,12 @@ resource envStorage 'Microsoft.App/managedEnvironments/storages@2024-03-01' = {
 }
 
 // ---------------------------------------------------------------------------
-// Container App — OpenClaw gateway
+// Container App — OpenClaw gateway (keyless via managed identity)
 // ---------------------------------------------------------------------------
-// NOTE: azd deploy replaces the placeholder image with the custom build from src/Dockerfile.
-// Future iteration: enable system-assigned managed identity for keyless Azure OpenAI access.
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'openclaw-${resourceToken}'
   location: location
-  // TODO (future): uncomment to enable managed identity for keyless auth
-  // identity: { type: 'SystemAssigned' }
+  identity: { type: 'SystemAssigned' }
   tags: {
     'azd-env-name': environmentName
     'azd-service-name': 'openclaw'
@@ -111,11 +108,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: environment.id
     configuration: {
       secrets: [
-        // TODO (future): remove API key secret once managed identity is active
-        {
-          name: 'openai-api-key'
-          value: openaiKey
-        }
         {
           name: 'acr-password'
           value: acr.listCredentials().passwords[0].value
@@ -146,19 +138,21 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           }
           env: [
             // Azure OpenAI v1 endpoint — fully OpenAI-SDK-compatible
-            // Redirects openclaw's native OpenAI integration to Azure OpenAI
             {
               name: 'OPENAI_BASE_URL'
               value: '${openaiEndpoint}openai/v1/'
             }
-            // API key (current); future: use DefaultAzureCredential via managed identity
-            {
-              name: 'OPENAI_API_KEY'
-              secretRef: 'openai-api-key'
-            }
+            // No OPENAI_API_KEY — the token-refresh wrapper in the container
+            // uses DefaultAzureCredential (managed identity) to obtain a bearer
+            // token and passes it to OpenClaw at runtime.
             {
               name: 'OPENAI_MODEL_DEPLOYMENT'
               value: openaiDeploymentName
+            }
+            // Signal to the entrypoint that managed identity auth is active
+            {
+              name: 'AZURE_OPENAI_AUTH'
+              value: 'managed-identity'
             }
           ]
           volumeMounts: [
@@ -184,21 +178,27 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-// TODO (future): Assign Cognitive Services User role to the Container App's managed identity
-// This removes the need for API keys entirely.
-//
-// resource cognitiveServicesUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-//   name: guid(subscription().id, containerApp.id, 'a97b65f3-24c7-4388-baec-2e87135dc908')
-//   scope: <openaiResource>
-//   properties: {
-//     principalId: containerApp.identity.principalId
-//     roleDefinitionId: subscriptionResourceId(
-//       'Microsoft.Authorization/roleDefinitions',
-//       'a97b65f3-24c7-4388-baec-2e87135dc908' // Cognitive Services User
-//     )
-//     principalType: 'ServicePrincipal'
-//   }
-// }
+// ---------------------------------------------------------------------------
+// RBAC — Assign Cognitive Services User to the Container App's managed identity
+// This is what makes keyless auth work: the container's identity can call Azure
+// OpenAI without any API key.
+// ---------------------------------------------------------------------------
+resource openaiResource 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+  name: last(split(openaiResourceId, '/'))
+}
+
+resource cognitiveServicesUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, containerApp.id, 'a97b65f3-24c7-4388-baec-2e87135dc908')
+  scope: openaiResource
+  properties: {
+    principalId: containerApp.identity.principalId
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      'a97b65f3-24c7-4388-baec-2e87135dc908' // Cognitive Services User
+    )
+    principalType: 'ServicePrincipal'
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Outputs

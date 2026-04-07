@@ -49,11 +49,6 @@ module openai 'resources.bicep' = {
   }
 }
 
-// Reference the deployed OpenAI resource to retrieve the API key
-resource openaiAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
-  name: openai.outputs.AZURE_OPENAI_NAME
-}
-
 // ---------------------------------------------------------------------------
 // 2. Azure Container Apps — hosts OpenClaw with Azure Files state persistence
 // ---------------------------------------------------------------------------
@@ -64,9 +59,8 @@ module aca 'aca.bicep' = {
     resourceToken: resourceToken
     environmentName: environmentName
     openaiEndpoint: openai.outputs.AZURE_OPENAI_ENDPOINT
-    // API key auth (current); future iteration will use managed identity
-    openaiKey: openaiAccount.listKeys().key1
     openaiDeploymentName: openai.outputs.AZURE_OPENAI_GPT_DEPLOYMENT_NAME
+    openaiResourceId: openai.outputs.AZURE_OPENAI_RESOURCE_ID
   }
 }
 

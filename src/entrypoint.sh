@@ -44,13 +44,21 @@ restore_state
 
 # -------------------------------------------------------
 # Start OpenClaw gateway
-# OPENAI_BASE_URL and OPENAI_API_KEY are set by the Container App
-# and redirect openclaw's native OpenAI integration to Azure OpenAI v1
+# OPENAI_BASE_URL is set by the Container App env vars.
+# When AZURE_OPENAI_AUTH=managed-identity, the token-refresh wrapper
+# fetches an Entra ID bearer token via DefaultAzureCredential and
+# passes it as OPENAI_API_KEY to the OpenClaw process. No API keys needed.
 # -------------------------------------------------------
 echo "[openclaw] Starting gateway on port 18789..."
 echo "[openclaw] Azure OpenAI v1 endpoint: ${OPENAI_BASE_URL}"
+echo "[openclaw] Auth mode: ${AZURE_OPENAI_AUTH:-api-key}"
 
-openclaw gateway --port 18789 &
+if [ "${AZURE_OPENAI_AUTH}" = "managed-identity" ]; then
+    echo "[openclaw] Using managed identity (keyless) auth"
+    node /opt/token-refresh.mjs --port 18789 &
+else
+    openclaw gateway --port 18789 &
+fi
 OPENCLAW_PID=$!
 
 wait $OPENCLAW_PID
