@@ -124,10 +124,12 @@ Container App                    Entra ID                    Azure OpenAI
 
 | Resource | Purpose |
 |---|---|
-| Azure OpenAI (GPT-5-mini) | LLM backend via the OpenAI-compatible `/openai/v1` endpoint |
-| Azure Container Apps | Hosts the OpenClaw gateway container with system-assigned managed identity |
+| Virtual Network | Network isolation — all resources communicate via private endpoints |
+| Azure OpenAI (GPT-5-mini) | LLM backend via `/openai/v1` (public access disabled, keyless auth only) |
+| Azure Container Apps (internal) | Hosts the OpenClaw gateway — no public ingress |
 | Azure Files | Persists OpenClaw state (credentials, workspace, sessions) across restarts |
 | Azure Container Registry | Stores the custom OpenClaw container image |
+| Private Endpoints + DNS Zones | Azure OpenAI and Storage reachable only inside the VNet |
 | Log Analytics | Gateway and container logs |
 
 ## Quick start
@@ -158,11 +160,65 @@ The token-refresh wrapper (`src/token-refresh.mjs`) calls `getBearerTokenProvide
 
 No API keys are created, stored, or rotated — `disableLocalAuth` is set to `true` on the Azure OpenAI resource.
 
-## Security
+## Security — locked-down sandbox
 
-- **No API keys** — managed identity with Entra ID tokens only; `disableLocalAuth: true` on Azure OpenAI
-- **RBAC** — `Cognitive Services User` role scoped to the specific Azure OpenAI resource
-- **Token refresh** — automatic via `getBearerTokenProvider` from `@azure/identity` (caches + refreshes internally)
+Every resource in this template is network-isolated. Nothing is accessible from the public internet.
+
+### Security boundaries
+
+| Layer | Control | Effect |
+|---|---|---|
+| **Network** | VNet with private endpoints | All traffic stays inside the VNet — no public internet paths |
+| **ACA Environment** | `internal: true` | Gateway has no public FQDN; only reachable from inside the VNet |
+| **Azure OpenAI** | `publicNetworkAccess: Disabled` | Cannot be called from the internet; only via private endpoint |
+| **Azure Storage** | `publicNetworkAccess: Disabled` | State files only accessible via private endpoint inside the VNet |
+| **Authentication** | `disableLocalAuth: true` | No API keys exist or can be created; Entra ID tokens only |
+| **RBAC** | `Cognitive Services User` | Scoped to the single Azure OpenAI resource; least-privilege |
+| **Token auth** | `getBearerTokenProvider` | Short-lived JWT tokens (∼60 min); auto-refreshed every 45 min |
+| **DNS** | Private DNS zones | `privatelink.openai.azure.com` and `privatelink.file.core.windows.net` resolve inside VNet only |
+
+### How to access the gateway
+
+Since the ACA environment is internal-only, you must connect to the VNet to reach the OpenClaw gateway:
+
+- **VPN Gateway** — connect your machine to the VNet via point-to-site VPN
+- **Azure Bastion** — jump box inside the VNet
+- **`az containerapp exec`** — shell into the running container directly
+- **Tailscale** — OpenClaw supports Tailscale Serve/Funnel natively (configure via `gateway.tailscale.mode` in `openclaw.json`)
+
+## Testing
+
+After deploying with `azd up`, validate via `az containerapp exec`:
+
+```bash
+# Get the container app name
+APP_NAME=$(az containerapp list --resource-group <rg> --query "[0].name" -o tsv)
+
+# Shell into the container
+az containerapp exec --name $APP_NAME --resource-group <rg>
+
+# Inside the container — test the agent
+openclaw agent --message "Say hello in exactly 5 words."
+
+# Verify managed identity auth is active
+echo $AZURE_OPENAI_AUTH   # should print: managed-identity
+echo $OPENAI_BASE_URL     # should print: https://<resource>.openai.azure.com/openai/v1/
+
+# Check state persistence
+ls -la /mnt/state/
+
+# Check gateway health
+curl -s http://localhost:18789/api/health
+```
+
+A full validation script is included at `validate.sh` for automated testing from inside the VNet.
+
+### What to try
+
+1. **Basic agent test** — `openclaw agent --message "Explain what OpenClaw is."` — confirms Azure OpenAI is responding via managed identity
+2. **Session persistence** — send a message, restart the container (`az containerapp revision restart`), send another — the session history should survive via Azure Files
+3. **Verify no API keys** — `az cognitiveservices account list-keys` should fail because `disableLocalAuth: true`
+4. **Check logs** — `az containerapp logs show --name $APP_NAME --resource-group <rg> --follow` — look for `[auth] Obtained Entra ID token via getBearerTokenProvider`
 
 ## Clean up
 

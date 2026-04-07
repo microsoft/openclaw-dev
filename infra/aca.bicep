@@ -1,6 +1,8 @@
 // Azure Container Apps infrastructure for OpenClaw
-// Provisions: ACR, Log Analytics, ACA Environment, Azure Files storage, Container App
+// Provisions: VNet, ACR, Log Analytics, ACA Environment (internal),
+//             Azure Files storage, Container App, private endpoints
 // Uses managed identity (keyless) for Azure OpenAI access
+// All resources are network-isolated — no public internet access
 
 param location string
 param resourceToken string
@@ -16,6 +18,39 @@ param openaiDeploymentName string
 param openaiResourceId string
 
 // ---------------------------------------------------------------------------
+// Virtual Network — network isolation for all resources
+// ---------------------------------------------------------------------------
+resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
+  name: 'vnet-${resourceToken}'
+  location: location
+  tags: { 'azd-env-name': environmentName }
+  properties: {
+    addressSpace: { addressPrefixes: ['10.0.0.0/16'] }
+    subnets: [
+      {
+        name: 'aca-subnet'
+        properties: {
+          addressPrefix: '10.0.0.0/23'
+          delegations: [
+            {
+              name: 'aca-delegation'
+              properties: { serviceName: 'Microsoft.App/environments' }
+            }
+          ]
+        }
+      }
+      {
+        name: 'private-endpoints'
+        properties: {
+          addressPrefix: '10.0.2.0/24'
+          privateEndpointNetworkPolicies: 'Disabled'
+        }
+      }
+    ]
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Azure Container Registry
 // ---------------------------------------------------------------------------
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -28,6 +63,7 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
 
 // ---------------------------------------------------------------------------
 // Azure Storage — persistent state for OpenClaw (credentials, workspace, sessions)
+// Network-restricted: deny public access, allow only VNet via private endpoint
 // ---------------------------------------------------------------------------
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: 'st${resourceToken}'
@@ -35,6 +71,13 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   sku: { name: 'Standard_LRS' }
   kind: 'StorageV2'
   tags: { 'azd-env-name': environmentName }
+  properties: {
+    publicNetworkAccess: 'Disabled'
+    networkAcls: {
+      defaultAction: 'Deny'
+      bypass: 'AzureServices'
+    }
+  }
 }
 
 resource fileServices 'Microsoft.Storage/storageAccounts/fileServices@2023-05-01' = {
@@ -62,13 +105,17 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
 }
 
 // ---------------------------------------------------------------------------
-// Container Apps Environment
+// Container Apps Environment — internal VNet integration (no public ingress)
 // ---------------------------------------------------------------------------
 resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: 'env-${resourceToken}'
   location: location
   tags: { 'azd-env-name': environmentName }
   properties: {
+    vnetConfiguration: {
+      infrastructureSubnetId: vnet.properties.subnets[0].id
+      internal: true
+    }
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
@@ -121,7 +168,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       ingress: {
-        external: true
+        external: false
         targetPort: 18789
         transport: 'auto'
       }
@@ -197,6 +244,106 @@ resource cognitiveServicesUserRole 'Microsoft.Authorization/roleAssignments@2022
       'a97b65f3-24c7-4388-baec-2e87135dc908' // Cognitive Services User
     )
     principalType: 'ServicePrincipal'
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Private DNS Zones — resolve private endpoint FQDNs inside the VNet
+// ---------------------------------------------------------------------------
+resource openaiPrivateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
+  name: 'privatelink.openai.azure.com'
+  location: 'global'
+  tags: { 'azd-env-name': environmentName }
+}
+
+resource openaiDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
+  parent: openaiPrivateDnsZone
+  name: 'openai-vnet-link'
+  location: 'global'
+  properties: {
+    virtualNetwork: { id: vnet.id }
+    registrationEnabled: false
+  }
+}
+
+resource storagePrivateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
+  name: 'privatelink.file.core.windows.net'
+  location: 'global'
+  tags: { 'azd-env-name': environmentName }
+}
+
+resource storageDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
+  parent: storagePrivateDnsZone
+  name: 'storage-vnet-link'
+  location: 'global'
+  properties: {
+    virtualNetwork: { id: vnet.id }
+    registrationEnabled: false
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Private Endpoints — Azure OpenAI and Storage are only reachable via VNet
+// ---------------------------------------------------------------------------
+resource openaiPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-01-01' = {
+  name: 'pe-openai-${resourceToken}'
+  location: location
+  tags: { 'azd-env-name': environmentName }
+  properties: {
+    subnet: { id: vnet.properties.subnets[1].id }
+    privateLinkServiceConnections: [
+      {
+        name: 'openai-link'
+        properties: {
+          privateLinkServiceId: openaiResourceId
+          groupIds: ['account']
+        }
+      }
+    ]
+  }
+}
+
+resource openaiPeDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-01-01' = {
+  parent: openaiPrivateEndpoint
+  name: 'openai-dns-group'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'openai-config'
+        properties: { privateDnsZoneId: openaiPrivateDnsZone.id }
+      }
+    ]
+  }
+}
+
+resource storagePrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-01-01' = {
+  name: 'pe-storage-${resourceToken}'
+  location: location
+  tags: { 'azd-env-name': environmentName }
+  properties: {
+    subnet: { id: vnet.properties.subnets[1].id }
+    privateLinkServiceConnections: [
+      {
+        name: 'storage-link'
+        properties: {
+          privateLinkServiceId: storageAccount.id
+          groupIds: ['file']
+        }
+      }
+    ]
+  }
+}
+
+resource storagePeDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-01-01' = {
+  parent: storagePrivateEndpoint
+  name: 'storage-dns-group'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'storage-config'
+        properties: { privateDnsZoneId: storagePrivateDnsZone.id }
+      }
+    ]
   }
 }
 
