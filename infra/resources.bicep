@@ -38,13 +38,13 @@ module openai 'br/public:avm/res/cognitive-services/account:0.13.2' = {
     kind: 'OpenAI'
     sku: sku
     customSubDomainName: 'openai-${resourceToken}'
-    // Deny all public network access — only reachable via private endpoint in the VNet
-    publicNetworkAccess: 'Disabled'
+    // Public network access allowed (no VNet) — security is via managed identity + disableLocalAuth
     networkAcls: {
-      defaultAction: 'Deny'
+      defaultAction: 'Allow'
       bypass: 'AzureServices'
     }
     // Disable API key auth — managed identity only (keyless)
+    // This is the primary security control: no API keys exist, only Entra ID tokens work
     disableLocalAuth: true
     // No deploying-user role assignment needed — only the Container App's
     // managed identity gets Cognitive Services User (assigned in aca.bicep)
