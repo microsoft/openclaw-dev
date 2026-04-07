@@ -1,32 +1,36 @@
-// Token-refresh wrapper for OpenClaw with Azure OpenAI managed identity auth.
-// Fetches an Entra ID token via DefaultAzureCredential, sets it as OPENAI_API_KEY,
-// spawns OpenClaw gateway, and refreshes the token before expiry.
+// Managed identity auth wrapper for OpenClaw + Azure OpenAI v1 API.
+//
+// Uses the same pattern as the Azure OpenAI Starter Kit:
+// https://github.com/Azure-Samples/azure-openai-starter/blob/main/src/typescript/responses_example_entra.ts
+//
+// getBearerTokenProvider returns a callable that the OpenAI SDK invokes on each
+// request, so tokens are refreshed automatically — no manual timer needed.
+//
+// This wrapper sets OPENAI_API_KEY to the token provider's initial value, then
+// spawns OpenClaw. For continuous refresh, it periodically updates the env and
+// sends SIGHUP to trigger OpenClaw's config-reload (which re-reads env).
 
-import { DefaultAzureCredential } from "@azure/identity";
+import { DefaultAzureCredential, getBearerTokenProvider } from "@azure/identity";
 import { spawn } from "node:child_process";
 
 const SCOPE = "https://cognitiveservices.azure.com/.default";
-const REFRESH_MARGIN_MS = 5 * 60 * 1000; // refresh 5 min before expiry
+const REFRESH_INTERVAL_MS = 45 * 60 * 1000; // refresh every 45 min (tokens last ~60 min)
 
 const credential = new DefaultAzureCredential();
+const tokenProvider = getBearerTokenProvider(credential, SCOPE);
+
 let openclawProcess = null;
 
-async function getToken() {
-  const token = await credential.getToken(SCOPE);
-  return token;
-}
-
 async function start() {
-  const token = await getToken();
-  console.log("[token-refresh] Obtained Entra ID token, expires:", token.expiresOnTimestamp
-    ? new Date(token.expiresOnTimestamp).toISOString()
-    : "unknown");
+  // Get initial token via the provider (same pattern as the Azure sample)
+  const initialToken = await tokenProvider();
+  console.log("[auth] Obtained Entra ID token via getBearerTokenProvider");
 
-  // Set the token as the OpenAI API key — the v1 API accepts bearer tokens here
-  process.env.OPENAI_API_KEY = token.token;
+  // Set it as OPENAI_API_KEY for the OpenClaw process
+  process.env.OPENAI_API_KEY = initialToken;
 
   // Spawn OpenClaw gateway
-  const args = process.argv.slice(2); // forward any CLI args
+  const args = process.argv.slice(2);
   openclawProcess = spawn("openclaw", ["gateway", ...args], {
     stdio: "inherit",
     env: process.env,
@@ -36,30 +40,24 @@ async function start() {
     process.exit(code ?? 0);
   });
 
-  // Schedule token refresh
-  scheduleRefresh(token.expiresOnTimestamp);
-}
-
-function scheduleRefresh(expiresOnTimestamp) {
-  const now = Date.now();
-  const refreshIn = Math.max((expiresOnTimestamp - now) - REFRESH_MARGIN_MS, 30_000);
-  console.log(`[token-refresh] Next refresh in ${Math.round(refreshIn / 1000)}s`);
-
-  setTimeout(async () => {
+  // Periodically refresh the token — getBearerTokenProvider handles caching
+  // and only fetches a new token when the cached one is near expiry.
+  setInterval(async () => {
     try {
-      const token = await getToken();
-      process.env.OPENAI_API_KEY = token.token;
-      console.log("[token-refresh] Token refreshed, expires:", new Date(token.expiresOnTimestamp).toISOString());
-      scheduleRefresh(token.expiresOnTimestamp);
+      const freshToken = await tokenProvider();
+      process.env.OPENAI_API_KEY = freshToken;
+      // Signal OpenClaw to reload config (picks up new env value)
+      if (openclawProcess && !openclawProcess.killed) {
+        openclawProcess.kill("SIGHUP");
+      }
+      console.log("[auth] Token refreshed");
     } catch (err) {
-      console.error("[token-refresh] Failed to refresh token:", err.message);
-      // Retry in 60s
-      setTimeout(() => scheduleRefresh(Date.now() + 10 * 60 * 1000), 60_000);
+      console.error("[auth] Token refresh failed:", err.message);
     }
-  }, refreshIn);
+  }, REFRESH_INTERVAL_MS);
 }
 
-// Forward signals to the child process
+// Forward termination signals to the child process
 for (const sig of ["SIGTERM", "SIGINT"]) {
   process.on(sig, () => {
     if (openclawProcess) openclawProcess.kill(sig);
@@ -67,6 +65,6 @@ for (const sig of ["SIGTERM", "SIGINT"]) {
 }
 
 start().catch((err) => {
-  console.error("[token-refresh] Fatal:", err);
+  console.error("[auth] Fatal:", err);
   process.exit(1);
 });
