@@ -220,6 +220,100 @@ A full validation script is included at `validate.sh` for automated testing from
 3. **Verify no API keys** — `az cognitiveservices account list-keys` should fail because `disableLocalAuth: true`
 4. **Check logs** — `az containerapp logs show --name $APP_NAME --resource-group <rg> --follow` — look for `[auth] Obtained Entra ID token via getBearerTokenProvider`
 
+### Sample end-to-end test
+
+Run this from inside the container (`az containerapp exec`) to confirm the full pipeline — managed identity, Azure OpenAI v1, and the OpenClaw agent — works:
+
+```bash
+# 1. Verify the gateway is up
+curl -sf http://localhost:18789/api/health && echo "✅ Gateway healthy" || echo "❌ Gateway down"
+
+# 2. Ask the agent a question (hits Azure OpenAI via managed identity)
+openclaw agent --message "What is 2+2? Reply with just the number."
+# Expected: 4
+
+# 3. Test a multi-turn conversation
+openclaw agent --message "Remember the word 'lobster'."
+openclaw agent --message "What word did I just ask you to remember?"
+# Expected: lobster
+
+# 4. Verify state survives restart — check Azure Files
+ls /mnt/state/sessions/
+# Should show session files after the above conversation
+
+# 5. Verify auth mode
+echo "Auth: $AZURE_OPENAI_AUTH"
+echo "Endpoint: $OPENAI_BASE_URL"
+# Expected: managed-identity, https://<resource>.openai.azure.com/openai/v1/
+```
+
+## Managing the OpenClaw agent
+
+### Stop the agent
+
+Scale the container app to zero replicas — the gateway stops, no compute charges, state is preserved on Azure Files:
+
+```bash
+# Set your resource group and app name
+RG="<your-resource-group>"
+APP_NAME=$(az containerapp list --resource-group $RG --query "[0].name" -o tsv)
+
+# Stop (scale to 0)
+az containerapp update --name $APP_NAME --resource-group $RG \
+    --min-replicas 0 --max-replicas 0
+
+echo "✅ OpenClaw stopped. No compute running."
+```
+
+### Start the agent
+
+Scale back to 1 replica — the entrypoint restores state from Azure Files automatically:
+
+```bash
+# Start (scale to 1)
+az containerapp update --name $APP_NAME --resource-group $RG \
+    --min-replicas 1 --max-replicas 1
+
+echo "✅ OpenClaw started. State restored from Azure Files."
+```
+
+### Restart the agent
+
+Restart the active revision without changing scale — useful after config changes:
+
+```bash
+# Get the active revision
+REVISION=$(az containerapp revision list --name $APP_NAME --resource-group $RG \
+    --query "[?properties.active].name" -o tsv)
+
+# Restart it
+az containerapp revision restart --name $APP_NAME --resource-group $RG \
+    --revision $REVISION
+
+echo "✅ OpenClaw restarted."
+```
+
+### Check status
+
+```bash
+# Running state
+az containerapp show --name $APP_NAME --resource-group $RG \
+    --query "{status: properties.runningStatus, replicas: properties.template.scale}" -o table
+
+# Live logs
+az containerapp logs show --name $APP_NAME --resource-group $RG --follow
+
+# Recent log snapshot
+az containerapp logs show --name $APP_NAME --resource-group $RG --tail 50
+```
+
+### Redeploy after code changes
+
+```bash
+# Rebuild the container image and deploy the new revision
+azd deploy
+```
+
 ## Clean up
 
 ```bash
