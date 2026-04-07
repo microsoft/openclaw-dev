@@ -1,8 +1,11 @@
 FROM node:24-slim
 
-# Install OpenClaw and its peer dependencies globally
+# Install OpenClaw and fix missing bundled-plugin dependencies
+# @buape/carbon (Discord plugin) and @larksuiteoapi/node-sdk (Feishu/Lark plugin)
+# are required by OpenClaw's bundled channel plugins but not listed as dependencies
 RUN npm install -g openclaw@latest && \
-    cd /usr/local/lib/node_modules/openclaw && npm install --omit=dev || true
+    cd /usr/local/lib/node_modules/openclaw && \
+    npm install @buape/carbon @larksuiteoapi/node-sdk 2>/dev/null || true
 
 # Create directories for config and state
 RUN mkdir -p /root/.openclaw /mnt/state /opt/openclaw-auth

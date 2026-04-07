@@ -179,15 +179,19 @@ Following the spirit of enterprise security guidance for OpenClaw:
 | Issue | Cause | Fix |
 |---|---|---|
 | `msftclaw test` shows "Activating" | Container starting up | Wait 1-2 minutes and retry |
-| `ActivationFailed` | Entrypoint crashed | Run `msftclaw logs` — common: CRLF line endings (fixed with `sed` in Dockerfile) |
-| `ERR_MODULE_NOT_FOUND: @azure/identity` | ESM can't find global packages | Dockerfile installs locally in `/opt/openclaw-auth/` |
-| `Cannot find module '@buape/carbon'` | OpenClaw missing peer dependency | Dockerfile runs `npm install` in openclaw's module dir |
-| Pre-flight `roleAssignments/write` warning | azd permissions check | Type Y — deployment works. Or assign yourself `User Access Administrator` |
+| `ActivationFailed` | Entrypoint crashed | Run `msftclaw logs` — see below for common causes |
+| `Cannot find module '@buape/carbon'` | OpenClaw's Discord plugin needs `@buape/carbon` but it's not listed as a dependency | Fixed in Dockerfile: `cd node_modules/openclaw && npm install @buape/carbon @larksuiteoapi/node-sdk` |
+| `Cannot find module '@larksuiteoapi/node-sdk'` | OpenClaw's Feishu/Lark plugin needs this package | Same fix as above — both are installed in the Dockerfile |
+| `ERR_MODULE_NOT_FOUND: @azure/identity` | Node.js ESM resolves from the file's directory, not CWD | Dockerfile installs `@azure/identity` in `/opt/openclaw-auth/` alongside `token-refresh.mjs` |
+| CRLF line endings break entrypoint | Git on Windows converts LF to CRLF | Fixed in Dockerfile: `sed -i 's/\r$//' /opt/entrypoint.sh` |
+| `openclaw doctor --fix` doesn't work at build time | Config loading itself fails due to missing deps — circular | Install the specific packages directly instead (see Dockerfile) |
+| `azd deploy` doesn't pick up Dockerfile changes | Docker layer caching | Force rebuild: `docker build --no-cache -t <tag> ./src` |
+| Pre-flight `roleAssignments/write` warning | azd permissions check | Type Y — deployment works. Or run `az role assignment create --assignee <you> --role "User Access Administrator" --scope /subscriptions/<sub>` |
 | `disableLocalAuth` prevents `list-keys` | No API keys by design | Expected — managed identity only |
-| `[auth] Fatal` in logs | Token acquisition failed | Verify `Cognitive Services User` role: `az role assignment list --scope <openai-id>` |
-| Docker cache serves old image | `azd deploy` caches | `docker build --no-cache -t <tag> ./src` |
-| Container scaled to 0 | Scale-to-zero active | `msftclaw start` or send HTTP request — ACA scales up automatically |
-| Agent behaves strangely | Possible memory poisoning | Restore workspace from backup or `msftclaw down && msftclaw up` |
+| `[auth] Fatal` in logs | Token acquisition failed | Verify role: `az role assignment list --scope <openai-id>` |
+| Container scaled to 0, not responding | Scale-to-zero active | `msftclaw start` or send an HTTP request — ACA scales up automatically |
+| Agent behaves strangely | Possible memory poisoning / prompt injection | Restore workspace from backup or `msftclaw down && msftclaw up` |
+| New OpenClaw version has new missing deps | Bundled plugins add new external requires | Shell in: `az containerapp exec ... --command /bin/bash`, then `cd /usr/local/lib/node_modules/openclaw && npm install` and check logs for the missing module name |
 
 ## Clean up
 
