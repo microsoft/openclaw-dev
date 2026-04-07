@@ -235,6 +235,110 @@ deploy)
     echo ""
     ;;
 
+teams)
+    echo ""
+    echo -e "  ${C}Microsoft Teams Setup${N}"
+    echo -e "  ${C}---------------------${N}"
+    echo ""
+
+    # Check if Teams config already exists
+    TEAMS_DIR="$ROOT/teams"
+    TEAMS_CONFIG="$ROOT/src/openclaw.json"
+
+    # Step 1: Collect credentials
+    echo -e "  ${D}You need an Azure Bot registration. If you don't have one:${N}"
+    echo -e "  ${D}  1. Go to https://portal.azure.com/#create/Microsoft.AzureBot${N}"
+    echo -e "  ${D}  2. Create a Single Tenant bot${N}"
+    echo -e "  ${D}  3. Copy the App ID, Client Secret, and Tenant ID${N}"
+    echo -e "  ${D}  4. In the bot's Channels tab, enable Microsoft Teams${N}"
+    echo ""
+
+    read -rp "  Azure Bot App ID: " BOT_APP_ID
+    read -rp "  Azure Bot Client Secret: " BOT_APP_PASSWORD
+    read -rp "  Tenant ID [${AZURE_TENANT_ID:-}]: " BOT_TENANT_ID
+    BOT_TENANT_ID="${BOT_TENANT_ID:-$AZURE_TENANT_ID}"
+
+    if [ -z "$BOT_APP_ID" ] || [ -z "$BOT_APP_PASSWORD" ] || [ -z "$BOT_TENANT_ID" ]; then
+        echo -e "  ${R}All three values are required.${N}"
+        exit 1
+    fi
+
+    # Step 2: Update openclaw.json with Teams channel config
+    echo ""
+    echo -e "  ${C}Configuring openclaw.json with Teams channel...${N}"
+
+    # Use node to merge the Teams config into openclaw.json
+    node -e "
+const fs = require('fs');
+const cfg = JSON.parse(fs.readFileSync('$TEAMS_CONFIG', 'utf8'));
+cfg.channels = cfg.channels || {};
+cfg.channels.msteams = {
+  enabled: true,
+  appId: '$BOT_APP_ID',
+  appPassword: '$BOT_APP_PASSWORD',
+  tenantId: '$BOT_TENANT_ID',
+  webhook: { port: 3978, path: '/api/messages' },
+  dmPolicy: 'pairing',
+  requireMention: true
+};
+fs.writeFileSync('$TEAMS_CONFIG', JSON.stringify(cfg, null, 2) + '\n');
+"
+    echo -e "  ${G}openclaw.json updated with Teams config.${N}"
+
+    # Step 3: Build Teams app manifest
+    echo -e "  ${C}Building Teams app package...${N}"
+    mkdir -p "$TEAMS_DIR/package"
+
+    # Generate manifest with real App ID
+    sed "s/APP_ID_PLACEHOLDER/$BOT_APP_ID/g" "$TEAMS_DIR/manifest.json" > "$TEAMS_DIR/package/manifest.json"
+
+    # Create placeholder icons if they don't exist
+    if [ ! -f "$TEAMS_DIR/package/color.png" ]; then
+        # 1x1 red PNG (will be replaced by user)
+        printf '\x89PNG\r\n\x1a\n' > "$TEAMS_DIR/package/color.png"
+        echo -e "  ${Y}Created placeholder color.png — replace with a 192x192 icon${N}"
+    fi
+    if [ ! -f "$TEAMS_DIR/package/outline.png" ]; then
+        printf '\x89PNG\r\n\x1a\n' > "$TEAMS_DIR/package/outline.png"
+        echo -e "  ${Y}Created placeholder outline.png — replace with a 32x32 icon${N}"
+    fi
+
+    # Create ZIP
+    if command -v zip &>/dev/null; then
+        (cd "$TEAMS_DIR/package" && zip -q ../openclaw-teams-app.zip manifest.json color.png outline.png)
+        echo -e "  ${G}Teams app package: teams/openclaw-teams-app.zip${N}"
+    else
+        echo -e "  ${Y}Install 'zip' to auto-create the package, or manually zip:${N}"
+        echo -e "  ${D}  teams/package/manifest.json + color.png + outline.png${N}"
+    fi
+
+    # Step 4: Set messaging endpoint
+    echo ""
+    get_app 2>/dev/null || true
+    FQDN=$(az containerapp show --name "$APP" --resource-group "$RG" \
+        --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || true)
+
+    echo -e "  ${C}Next steps:${N}"
+    echo ""
+    echo -e "  1. ${D}Set the Azure Bot messaging endpoint to:${N}"
+    if [ -n "$FQDN" ]; then
+        echo -e "     ${C}https://${FQDN}/api/messages${N}"
+        echo -e "     ${Y}(Note: this is an internal FQDN — you need Tailscale Funnel or a tunnel)${N}"
+    else
+        echo -e "     ${C}https://<your-public-url>/api/messages${N}"
+    fi
+    echo ""
+    echo -e "  2. ${D}Upload the Teams app package:${N}"
+    echo -e "     ${D}Teams > Apps > Manage your apps > Upload a custom app${N}"
+    echo -e "     ${D}Select: teams/openclaw-teams-app.zip${N}"
+    echo ""
+    echo -e "  3. ${D}Redeploy to apply the config:${N}"
+    echo -e "     ${C}msftclaw deploy${N}"
+    echo ""
+    echo -e "  4. ${D}DM the bot in Teams to test!${N}"
+    echo ""
+    ;;
+
 *)
     echo ""
     echo -e "  ${C}msftclaw — OpenClaw in the Microsoft Cloud${N}"
@@ -242,6 +346,9 @@ deploy)
     echo "  Getting started:"
     echo "    msftclaw up         Deploy OpenClaw to Azure"
     echo "    msftclaw test       Verify it's working"
+    echo ""
+    echo "  Channels:"
+    echo "    msftclaw teams      Set up Microsoft Teams integration"
     echo ""
     echo "  Control:"
     echo "    msftclaw start      Start the agent"

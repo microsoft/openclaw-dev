@@ -1,0 +1,42 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.23/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.23",
+  "version": "1.0.0",
+  "id": "APP_ID_PLACEHOLDER",
+  "name": { "short": "OpenClaw", "full": "OpenClaw AI Assistant" },
+  "developer": {
+    "name": "Your Organization",
+    "websiteUrl": "https://github.com/microsoft/openclaw",
+    "privacyUrl": "https://github.com/microsoft/openclaw",
+    "termsOfUseUrl": "https://github.com/microsoft/openclaw"
+  },
+  "description": {
+    "short": "AI assistant powered by OpenClaw",
+    "full": "Your personal AI assistant running securely in the Microsoft Cloud. Ask questions, draft documents, review code, summarize meetings, and more — all from Teams."
+  },
+  "icons": { "outline": "outline.png", "color": "color.png" },
+  "accentColor": "#E94560",
+  "bots": [
+    {
+      "botId": "APP_ID_PLACEHOLDER",
+      "scopes": ["personal", "team", "groupChat"],
+      "isNotificationOnly": false,
+      "supportsCalling": false,
+      "supportsVideo": false,
+      "supportsFiles": true
+    }
+  ],
+  "webApplicationInfo": {
+    "id": "APP_ID_PLACEHOLDER"
+  },
+  "authorization": {
+    "permissions": {
+      "resourceSpecific": [
+        { "name": "ChannelMessage.Read.Group", "type": "Application" },
+        { "name": "ChannelMessage.Send.Group", "type": "Application" },
+        { "name": "Member.Read.Group", "type": "Application" },
+        { "name": "ChatMessage.Read.Chat", "type": "Application" }
+      ]
+    }
+  }
+}
