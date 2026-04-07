@@ -26,9 +26,6 @@ param gptModelVersion string = '2025-08-07'
 @description('GPT deployment capacity (tokens-per-minute in thousands)')
 param gptCapacity int = 10
 
-@description('Principal ID of the deploying user. If provided, assigns Cognitive Services User role.')
-param principalId string = ''
-
 // Deploy the Azure OpenAI resource via AVM
 module openai 'br/public:avm/res/cognitive-services/account:0.13.2' = {
   name: 'openai-account'
@@ -49,14 +46,9 @@ module openai 'br/public:avm/res/cognitive-services/account:0.13.2' = {
     }
     // Disable API key auth — managed identity only (keyless)
     disableLocalAuth: true
-    // Assign Cognitive Services User role to the deploying user for keyless (EntraID) access
-    roleAssignments: !empty(principalId) ? [
-      {
-        principalId: principalId
-        roleDefinitionIdOrName: 'Cognitive Services User'
-        principalType: 'User'
-      }
-    ] : []
+    // No deploying-user role assignment needed — only the Container App's
+    // managed identity gets Cognitive Services User (assigned in aca.bicep)
+    roleAssignments: []
     deployments: deployGptModel ? [
       {
         name: gptModelName

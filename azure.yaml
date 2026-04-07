@@ -6,6 +6,7 @@ metadata:
 services:
   openclaw:
     host: containerapp
+    language: js
     project: ./src
     docker:
       path: Dockerfile
