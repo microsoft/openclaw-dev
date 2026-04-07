@@ -288,33 +288,3 @@ validate.sh                 # Automated validation script
 ```
 
 </details>
-
----
-
-## Advanced: VNet isolation
-
-<details>
-<summary>Click to expand VNet + private endpoint configuration</summary>
-
-The default template uses public endpoints for simplicity and scale-to-zero support. For stricter network isolation, add:
-
-1. **VNet** with ACA subnet + private endpoints subnet
-2. **Private endpoints** for Azure OpenAI and Azure Storage
-3. **Private DNS zones** for DNS resolution inside the VNet
-4. **`internal: true`** on the ACA environment (no public FQDN)
-5. **`publicNetworkAccess: Disabled`** on Azure OpenAI and Storage
-
-Trade-offs:
-
-| | Express (default) | VNet isolated |
-|---|---|---|
-| Scale to zero | ✅ | ❌ (VNet requires min 1 replica) |
-| Cold start | Fast | Slower (VNet + image pull) |
-| Deploy time | ~1 min | ~5 min |
-| Network isolation | Public endpoints (HTTPS/TLS) | Full VNet isolation |
-| Bicep complexity | ~100 lines | ~300 lines |
-| Cost | Pay per use | Always-on (~$2-5/day) |
-
-All security controls (managed identity, `disableLocalAuth`, RBAC) remain identical in both modes.
-
-</details>

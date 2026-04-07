@@ -1,7 +1,8 @@
 FROM node:24-slim
 
-# Install OpenClaw globally
-RUN npm install -g openclaw@latest
+# Install OpenClaw and its peer dependencies globally
+RUN npm install -g openclaw@latest && \
+    cd /usr/local/lib/node_modules/openclaw && npm install --omit=dev || true
 
 # Create directories for config and state
 RUN mkdir -p /root/.openclaw /mnt/state /opt/openclaw-auth
