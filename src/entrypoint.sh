@@ -21,10 +21,10 @@ sed -i "s|\${MSTEAMS_APP_ID}|${MSTEAMS_APP_ID}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_APP_PASSWORD}|${MSTEAMS_APP_PASSWORD}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_TENANT_ID}|${MSTEAMS_TENANT_ID}|g" /root/.openclaw/openclaw.json
 
-# Auto-set password via hash fragment (Easy Auth handles real auth)
+# Inject password into URL hash BEFORE any SPA scripts load
 CONTROL_UI="/usr/local/lib/node_modules/openclaw/dist/control-ui/index.html"
 if [ -f "$CONTROL_UI" ]; then
-    sed -i 's|</body>|<script>if(!location.hash.includes("password=")){location.hash="password=passwordless-protection-with-easyauth"}</script></body>|' "$CONTROL_UI"
+    sed -i '0,/<script>/s//<script>if(!location.hash.includes("password=")){location.hash="password=passwordless-protection-with-easyauth";}<\/script><script>/' "$CONTROL_UI"
 fi
 
 echo "[openclaw] Config: $(cat /root/.openclaw/openclaw.json)"
