@@ -21,10 +21,15 @@ sed -i "s|\${MSTEAMS_APP_ID}|${MSTEAMS_APP_ID}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_APP_PASSWORD}|${MSTEAMS_APP_PASSWORD}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_TENANT_ID}|${MSTEAMS_TENANT_ID}|g" /root/.openclaw/openclaw.json
 
-# Inject password into URL hash BEFORE any SPA scripts load
+# Gateway token for auth (used by both --token flag and SPA auto-connect)
+GATEWAY_TOKEN="easyauth-auto-connect"
+
+# Inject token into URL hash BEFORE any SPA scripts load
+# The SPA reads #token=<value>, saves it to settings, and auto-connects
 CONTROL_UI="/usr/local/lib/node_modules/openclaw/dist/control-ui/index.html"
 if [ -f "$CONTROL_UI" ]; then
-    sed -i '0,/<script>/s//<script>if(!location.hash.includes("password=")){location.hash="password=passwordless-protection-with-easyauth";}<\/script><script>/' "$CONTROL_UI"
+    sed -i "0,/<script>/s//<script>if(!location.hash.includes('token=')){location.hash='token=${GATEWAY_TOKEN}';}<\/script><script>/" "$CONTROL_UI"
+    echo "[openclaw] Injected auto-connect token into control UI HTML"
 fi
 
 echo "[openclaw] Config: $(cat /root/.openclaw/openclaw.json)"
@@ -54,8 +59,8 @@ if [ "${AZURE_OPENAI_AUTH}" = "managed-identity" ]; then
         echo "[openclaw] WARNING: Could not acquire token, starting gateway anyway"
         export OPENAI_API_KEY="pending-managed-identity-token"
     fi
-    exec openclaw gateway --bind lan --port 18789 --password "passwordless-protection-with-easyauth"
+    exec openclaw gateway --bind lan --port 18789 --token "$GATEWAY_TOKEN"
 else
     echo "[openclaw] Using api-key"
-    exec openclaw gateway --bind lan --port 18789 --password "passwordless-protection-with-easyauth"
+    exec openclaw gateway --bind lan --port 18789 --token "$GATEWAY_TOKEN"
 fi
