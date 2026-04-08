@@ -4,5 +4,8 @@
     "controlUi": {
       "allowedOrigins": ["*"]
     }
+  },
+  "models": {
+    "default": "gpt-5-mini"
   }
 }
