@@ -1,6 +1,9 @@
 {
   "gateway": {
     "mode": "local",
+    "auth": {
+      "mode": "none"
+    },
     "controlUi": {
       "allowedOrigins": ["*"]
     }
