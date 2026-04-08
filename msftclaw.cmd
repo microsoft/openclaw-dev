@@ -97,11 +97,14 @@ exit /b 0
 for /f "tokens=*" %%a in ('azd env get-value AZURE_RESOURCE_GROUP 2^>nul') do set "RG=%%a"
 for /f "tokens=*" %%a in ('az containerapp list --resource-group %RG% --query "[0].name" -o tsv 2^>nul') do set "APP=%%a"
 for /f "tokens=*" %%a in ('az containerapp revision list --name %APP% --resource-group %RG% --query "[?properties.active].properties.runningState" -o tsv 2^>nul') do set "STATUS=%%a"
+for /f "tokens=*" %%a in ('az containerapp show --name %APP% --resource-group %RG% --query "properties.configuration.ingress.fqdn" -o tsv 2^>nul') do set "FQDN=%%a"
 echo.
 echo   msftclaw
 echo   --------
 echo   App:     %APP%
 echo   Status:  %STATUS%
+echo   URL:     https://%FQDN%
+echo   RG:      %RG%
 echo.
 exit /b 0
 
@@ -120,6 +123,8 @@ for /f "tokens=*" %%a in ('az containerapp list --resource-group %RG% --query "[
 for /f "tokens=*" %%a in ('az containerapp revision list --name %APP% --resource-group %RG% --query "[?properties.active].properties.runningState" -o tsv 2^>nul') do set "STATUS=%%a"
 echo.
 if "%STATUS%"=="Running" (
+    echo   Container: Running
+) else if "%STATUS%"=="RunningAtMaxScale" (
     echo   Container: Running
 ) else (
     echo   Container: %STATUS% - wait or check 'msftclaw logs'

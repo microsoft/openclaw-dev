@@ -78,7 +78,7 @@ login)
 up)
     echo ""
     echo -e "  ${C}Deploying OpenClaw to Azure...${N}"
-    echo -e "  ${D}This provisions a secure, VNet-isolated environment with Azure OpenAI.${N}"
+    echo -e "  ${D}This provisions Azure OpenAI + Container Apps with managed identity.${N}"
     echo ""
     azd up
     echo ""
@@ -147,7 +147,7 @@ test)
     STATUS=$(az containerapp revision list --name "$APP" --resource-group "$RG" \
         --query "[?properties.active].properties.runningState" -o tsv 2>/dev/null | head -1)
 
-    if [ "$STATUS" = "Running" ]; then
+    if [ "$STATUS" = "Running" ] || [ "$STATUS" = "RunningAtMaxScale" ]; then
         echo -e "  ${G}✅ Container is running${N}"
     elif [ "$STATUS" = "Activating" ]; then
         echo -e "  ${Y}⏳ Container is still activating — wait a moment and retry.${N}"
@@ -199,11 +199,13 @@ status)
 
     SC="$Y"
     [ "$STATUS" = "Running" ] && SC="$G"
+    [ "$STATUS" = "RunningAtMaxScale" ] && SC="$G"
     [ "$STATUS" = "ActivationFailed" ] && SC="$R"
 
     echo -e "  App:        $APP"
     echo -e "  Status:     ${SC}${STATUS:-unknown}${N}"
-    echo -e "  FQDN:       ${FQDN:-none} ${D}(internal-only)${N}"
+    echo -e "  FQDN:       ${FQDN:-none}"
+    echo -e "  URL:        ${G}https://${FQDN}${N}"
     echo -e "  Resource:   $RG"
     echo ""
     ;;
