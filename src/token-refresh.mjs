@@ -22,15 +22,15 @@ const tokenProvider = getBearerTokenProvider(credential, SCOPE);
 let openclawProcess = null;
 
 async function start() {
-  // Get initial token via the provider (same pattern as the Azure sample)
-  const initialToken = await tokenProvider();
-  console.log("[auth] Obtained Entra ID token via getBearerTokenProvider");
-
-  // Set it as OPENAI_API_KEY for the OpenClaw process
-  process.env.OPENAI_API_KEY = initialToken;
-
-  // Spawn OpenClaw gateway
+  // Start the gateway immediately — don't block on token acquisition.
+  // In ACA, the IMDS endpoint may take seconds to become available.
+  // The gateway will start and serve health probes while we acquire the token.
   const args = process.argv.slice(2);
+  
+  // Set a placeholder so OpenClaw doesn't refuse to start
+  process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || "pending-managed-identity-token";
+  
+  console.log("[auth] Starting gateway (token will be acquired in background)...");
   openclawProcess = spawn("openclaw", ["gateway", ...args], {
     stdio: "inherit",
     env: process.env,
@@ -39,6 +39,26 @@ async function start() {
   openclawProcess.on("exit", (code) => {
     process.exit(code ?? 0);
   });
+
+  // Acquire the real token with retries (IMDS may need time to initialize)
+  for (let attempt = 1; attempt <= 24; attempt++) {
+    try {
+      const token = await tokenProvider();
+      process.env.OPENAI_API_KEY = token;
+      if (openclawProcess && !openclawProcess.killed) {
+        openclawProcess.kill("SIGHUP");
+      }
+      console.log("[auth] Obtained Entra ID token via getBearerTokenProvider");
+      break;
+    } catch (err) {
+      console.error(`[auth] Token attempt ${attempt}/24 failed: ${err.message}`);
+      if (attempt === 24) {
+        console.error("[auth] All token attempts exhausted — gateway running without valid token");
+        break; // Don't crash — keep gateway alive for health probes
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
 
   // Periodically refresh the token — getBearerTokenProvider handles caching
   // and only fetches a new token when the cached one is near expiry.

@@ -1,65 +1,48 @@
 #!/bin/bash
-set -e
-
-STATE_DIR="/mnt/state"
-OPENCLAW_DIR="/root/.openclaw"
-
-# -------------------------------------------------------
-# Restore state from the Azure Files mount (if it exists)
-# -------------------------------------------------------
-restore_state() {
-    echo "[openclaw] Restoring state from Azure Files..."
-
-    for dir in credentials workspace sessions; do
-        if [ -d "$STATE_DIR/$dir" ] && [ "$(ls -A "$STATE_DIR/$dir" 2>/dev/null)" ]; then
-            mkdir -p "$OPENCLAW_DIR/$dir"
-            cp -r "$STATE_DIR/$dir/"* "$OPENCLAW_DIR/$dir/" 2>/dev/null || true
-            echo "[openclaw]   restored $dir"
-        fi
-    done
-
-    echo "[openclaw] State restoration complete."
-}
-
-# -------------------------------------------------------
-# Save state back to the Azure Files mount on termination
-# -------------------------------------------------------
-save_state() {
-    echo "[openclaw] Saving state to Azure Files..."
-
-    for dir in credentials workspace sessions; do
-        mkdir -p "$STATE_DIR/$dir"
-        if [ -d "$OPENCLAW_DIR/$dir" ]; then
-            cp -r "$OPENCLAW_DIR/$dir/"* "$STATE_DIR/$dir/" 2>/dev/null || true
-        fi
-    done
-
-    echo "[openclaw] State saved."
-}
-
-# Trap SIGTERM/SIGINT to persist state before the container exits
-trap 'save_state; exit 0' SIGTERM SIGINT
-
-restore_state
-
-# -------------------------------------------------------
-# Start OpenClaw gateway
-# OPENAI_BASE_URL is set by the Container App env vars.
-# When AZURE_OPENAI_AUTH=managed-identity, the token-refresh wrapper
-# fetches an Entra ID bearer token via DefaultAzureCredential and
-# passes it as OPENAI_API_KEY to the OpenClaw process. No API keys needed.
-# -------------------------------------------------------
-echo "[openclaw] Starting gateway on port 18789..."
-echo "[openclaw] Azure OpenAI v1 endpoint: ${OPENAI_BASE_URL}"
+echo "[openclaw] Starting..."
+echo "[openclaw] OpenClaw version: $(openclaw --version 2>&1)"
 echo "[openclaw] Auth mode: ${AZURE_OPENAI_AUTH:-api-key}"
+echo "[openclaw] OPENAI_BASE_URL: ${OPENAI_BASE_URL}"
+
+# Restore state
+for dir in credentials workspace sessions; do
+    if [ -d "/mnt/state/$dir" ] && [ "$(ls -A /mnt/state/$dir 2>/dev/null)" ]; then
+        mkdir -p "/root/.openclaw/$dir"
+        cp -r "/mnt/state/$dir/"* "/root/.openclaw/$dir/" 2>/dev/null || true
+    fi
+done
+
+# Canonical config (prevents stale config from Azure Files)
+cp -f /opt/openclaw.json.canonical /root/.openclaw/openclaw.json
+
+echo "[openclaw] Config: $(cat /root/.openclaw/openclaw.json)"
 
 if [ "${AZURE_OPENAI_AUTH}" = "managed-identity" ]; then
-    echo "[openclaw] Using managed identity (keyless) auth"
-    node /opt/openclaw-auth/token-refresh.mjs --port 18789 &
+    echo "[openclaw] Using managed identity — acquiring token..."
+    # Acquire initial Entra ID token, retry up to 60s for IMDS availability
+    TOKEN=""
+    for i in $(seq 1 12); do
+        TOKEN=$(node -e "
+            import('@azure/identity').then(async ({DefaultAzureCredential}) => {
+                const cred = new DefaultAzureCredential();
+                const token = await cred.getToken('https://cognitiveservices.azure.com/.default');
+                process.stdout.write(token.token);
+            }).catch(e => { process.stderr.write('[auth] attempt $i: ' + e.message + '\n'); process.exit(1); });
+        " 2>&1)
+        if [ $? -eq 0 ] && [ -n "$TOKEN" ]; then
+            echo "[openclaw] Entra ID token acquired"
+            export OPENAI_API_KEY="$TOKEN"
+            break
+        fi
+        echo "[openclaw] Token attempt $i/12 failed, retrying in 5s..."
+        sleep 5
+    done
+    if [ -z "$OPENAI_API_KEY" ]; then
+        echo "[openclaw] WARNING: Could not acquire token, starting gateway anyway"
+        export OPENAI_API_KEY="pending-managed-identity-token"
+    fi
+    exec openclaw gateway --bind lan --port 18789
 else
-    openclaw gateway --port 18789 &
+    echo "[openclaw] Using api-key"
+    exec openclaw gateway --bind lan --port 18789
 fi
-OPENCLAW_PID=$!
-
-wait $OPENCLAW_PID
-save_state
