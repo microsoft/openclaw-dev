@@ -5,10 +5,16 @@
       "allowedOrigins": ["*"]
     }
   },
+  "agents": {
+    "defaults": {
+      "model": "openai/gpt-5-mini"
+    }
+  },
   "models": {
-    "mode": "replace",
+    "mode": "merge",
     "providers": {
       "openai": {
+        "baseUrl": "${OPENAI_BASE_URL}",
         "models": [
           {
             "id": "gpt-5-mini",
