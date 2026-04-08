@@ -35,6 +35,9 @@ RUN sed -i 's/\r$//' /opt/openclaw-auth/token-refresh.mjs
 COPY entrypoint.sh /opt/entrypoint.sh
 RUN sed -i 's/\r$//' /opt/entrypoint.sh && chmod +x /opt/entrypoint.sh
 
+# Test script for agent conversations (strips emoji to avoid ACA exec Unicode crashes)
+RUN printf '#!/bin/sh\nopenclaw agent -m "$1" 2>&1 | LC_ALL=C tr -cd "\\11\\12\\15\\40-\\176"\n' > /opt/test-agent.sh && chmod +x /opt/test-agent.sh
+
 # OpenClaw gateway port
 EXPOSE 18789
 
