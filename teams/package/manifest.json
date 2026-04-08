@@ -26,9 +26,6 @@
       "supportsFiles": true
     }
   ],
-  "webApplicationInfo": {
-    "id": "604445c5-d8ca-46f0-9567-6de6e7d13af6"
-  },
   "authorization": {
     "permissions": {
       "resourceSpecific": [
