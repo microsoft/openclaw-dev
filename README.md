@@ -178,20 +178,21 @@ Following the spirit of enterprise security guidance for OpenClaw:
 
 | Issue | Cause | Fix |
 |---|---|---|
-| `msftclaw test` shows "Activating" | Container starting up | Wait 1-2 minutes and retry |
-| `ActivationFailed` | Entrypoint crashed | Run `msftclaw logs` — see below for common causes |
-| `Cannot find module '@buape/carbon'` | OpenClaw's Discord plugin needs `@buape/carbon` but it's not listed as a dependency | Fixed in Dockerfile: `cd node_modules/openclaw && npm install @buape/carbon @larksuiteoapi/node-sdk` |
-| `Cannot find module '@larksuiteoapi/node-sdk'` | OpenClaw's Feishu/Lark plugin needs this package | Same fix as above — both are installed in the Dockerfile |
+| `msftclaw test` shows "Activating" | Container starting up (startup probe allows up to 5 min) | Wait 1-2 minutes and retry |
+| `ActivationFailed` | Entrypoint crashed | Run `msftclaw logs` — see common causes below |
+| `Cannot find module` (any package) | OpenClaw npm package ships a stale `package-lock.json` that makes `npm install` think deps are satisfied when they're not | Fixed in Dockerfile: `rm -f package-lock.json && npm install` forces fresh resolution. See [openclaw#62749](https://github.com/openclaw/openclaw/issues/62749) |
+| `npm install` reports "up to date" but deps missing | The published lockfile reflects the pnpm workspace layout, not the npm install tree | Delete the lockfile first: `cd node_modules/openclaw && rm -f package-lock.json && npm install` |
 | `ERR_MODULE_NOT_FOUND: @azure/identity` | Node.js ESM resolves from the file's directory, not CWD | Dockerfile installs `@azure/identity` in `/opt/openclaw-auth/` alongside `token-refresh.mjs` |
 | CRLF line endings break entrypoint | Git on Windows converts LF to CRLF | Fixed in Dockerfile: `sed -i 's/\r$//' /opt/entrypoint.sh` |
-| `openclaw doctor --fix` doesn't work at build time | Config loading itself fails due to missing deps — circular | Install the specific packages directly instead (see Dockerfile) |
+| `openclaw doctor --fix` fails with missing module | Config loading requires the same missing deps — chicken-and-egg | Delete lockfile + npm install instead. See [openclaw#62759](https://github.com/openclaw/openclaw/issues/62759) |
 | `azd deploy` doesn't pick up Dockerfile changes | Docker layer caching | Force rebuild: `docker build --no-cache -t <tag> ./src` |
-| Pre-flight `roleAssignments/write` warning | azd permissions check | Type Y — deployment works. Or run `az role assignment create --assignee <you> --role "User Access Administrator" --scope /subscriptions/<sub>` |
+| Pre-flight `roleAssignments/write` warning | azd permissions heuristic | Type Y — deployment works. Or assign yourself `User Access Administrator`. See [azure-dev#7569](https://github.com/Azure/azure-dev/issues/7569) |
+| `az containerapp logs show` SSL error | Intermittent during container restarts | Use Azure Portal log stream instead. See [azure-cli#33146](https://github.com/Azure/azure-cli/issues/33146) |
+| `az containerapp exec` SSL error | CLI websocket issue | Use Azure Portal Console instead. See [azure-cli#33147](https://github.com/Azure/azure-cli/issues/33147) |
 | `disableLocalAuth` prevents `list-keys` | No API keys by design | Expected — managed identity only |
 | `[auth] Fatal` in logs | Token acquisition failed | Verify role: `az role assignment list --scope <openai-id>` |
-| Container scaled to 0, not responding | Scale-to-zero active | `msftclaw start` or send an HTTP request — ACA scales up automatically |
+| Container keeps restarting | Default startup probe too aggressive | Fixed in Bicep: startup probe allows 60 retries x 5s = 5 min boot window |
 | Agent behaves strangely | Possible memory poisoning / prompt injection | Restore workspace from backup or `msftclaw down && msftclaw up` |
-| New OpenClaw version has new missing deps | Bundled plugins add new external requires | Shell in: `az containerapp exec ... --command /bin/bash`, then `cd /usr/local/lib/node_modules/openclaw && npm install` and check logs for the missing module name |
 
 ## Clean up
 
