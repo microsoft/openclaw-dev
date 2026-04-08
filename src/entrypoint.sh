@@ -21,6 +21,12 @@ sed -i "s|\${MSTEAMS_APP_ID}|${MSTEAMS_APP_ID}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_APP_PASSWORD}|${MSTEAMS_APP_PASSWORD}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_TENANT_ID}|${MSTEAMS_TENANT_ID}|g" /root/.openclaw/openclaw.json
 
+# Auto-fill password in control UI so users behind Easy Auth don't have to type it
+CONTROL_UI="/usr/local/lib/node_modules/openclaw/dist/control-ui/index.html"
+if [ -f "$CONTROL_UI" ]; then
+    sed -i 's|</body>|<script>addEventListener("DOMContentLoaded",()=>{const i=setInterval(()=>{const p=document.querySelector("input[type=password],input[placeholder*=Password],input[placeholder*=password]");if(p){p.value="passwordless-protection-with-easyauth";p.dispatchEvent(new Event("input",{bubbles:true}));clearInterval(i);setTimeout(()=>{const b=document.querySelector("button");if(b)b.click()},500)}},200);setTimeout(()=>clearInterval(i),10000)})</script></body>|' "$CONTROL_UI"
+fi
+
 echo "[openclaw] Config: $(cat /root/.openclaw/openclaw.json)"
 
 if [ "${AZURE_OPENAI_AUTH}" = "managed-identity" ]; then
@@ -48,8 +54,8 @@ if [ "${AZURE_OPENAI_AUTH}" = "managed-identity" ]; then
         echo "[openclaw] WARNING: Could not acquire token, starting gateway anyway"
         export OPENAI_API_KEY="pending-managed-identity-token"
     fi
-    exec openclaw gateway --bind lan --port 18789 --password "easyauth-protected"
+    exec openclaw gateway --bind lan --port 18789 --password "passwordless-protection-with-easyauth"
 else
     echo "[openclaw] Using api-key"
-    exec openclaw gateway --bind lan --port 18789 --password "easyauth-protected"
+    exec openclaw gateway --bind lan --port 18789 --password "passwordless-protection-with-easyauth"
 fi
