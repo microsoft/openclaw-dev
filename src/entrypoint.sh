@@ -48,8 +48,8 @@ if [ "${AZURE_OPENAI_AUTH}" = "managed-identity" ]; then
         echo "[openclaw] WARNING: Could not acquire token, starting gateway anyway"
         export OPENAI_API_KEY="pending-managed-identity-token"
     fi
-    exec openclaw gateway --bind lan --port 18789 --password "${OPENCLAW_GATEWAY_PASSWORD:-openclaw-azure-test}"
+    exec openclaw gateway --bind lan --port 18789
 else
     echo "[openclaw] Using api-key"
-    exec openclaw gateway --bind lan --port 18789 --password "${OPENCLAW_GATEWAY_PASSWORD:-openclaw-azure-test}"
+    exec openclaw gateway --bind lan --port 18789
 fi
