@@ -24,7 +24,7 @@ sed -i "s|\${MSTEAMS_TENANT_ID}|${MSTEAMS_TENANT_ID}|g" /root/.openclaw/openclaw
 # Auto-fill password in control UI so users behind Easy Auth don't have to type it
 CONTROL_UI="/usr/local/lib/node_modules/openclaw/dist/control-ui/index.html"
 if [ -f "$CONTROL_UI" ]; then
-    sed -i 's|</body>|<script>addEventListener("DOMContentLoaded",()=>{const i=setInterval(()=>{const p=document.querySelector("input[type=password],input[placeholder*=Password],input[placeholder*=password]");if(p){p.value="passwordless-protection-with-easyauth";p.dispatchEvent(new Event("input",{bubbles:true}));clearInterval(i);setTimeout(()=>{const b=document.querySelector("button");if(b)b.click()},500)}},200);setTimeout(()=>clearInterval(i),10000)})</script></body>|' "$CONTROL_UI"
+    sed -i 's|</body>|<script>addEventListener("DOMContentLoaded",()=>{const i=setInterval(()=>{const inputs=document.querySelectorAll("input[type=password]");const p=inputs.length>=2?inputs[1]:null;if(p){p.value="passwordless-protection-with-easyauth";p.dispatchEvent(new Event("input",{bubbles:true}));clearInterval(i);setTimeout(()=>{const b=document.querySelector("button");if(b)b.click()},500)}},200);setTimeout(()=>clearInterval(i),10000)})</script></body>|' "$CONTROL_UI"
 fi
 
 echo "[openclaw] Config: $(cat /root/.openclaw/openclaw.json)"
