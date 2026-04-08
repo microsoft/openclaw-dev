@@ -5,7 +5,9 @@
       "mode": "none"
     },
     "controlUi": {
-      "allowedOrigins": ["*"]
+      "enabled": true,
+      "allowedOrigins": ["*"],
+      "dangerouslyAllowHostHeaderOriginFallback": true
     }
   },
   "agents": {
