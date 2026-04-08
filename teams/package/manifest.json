@@ -25,15 +25,5 @@
       "supportsVideo": false,
       "supportsFiles": true
     }
-  ],
-  "authorization": {
-    "permissions": {
-      "resourceSpecific": [
-        { "name": "ChannelMessage.Read.Group", "type": "Application" },
-        { "name": "ChannelMessage.Send.Group", "type": "Application" },
-        { "name": "Member.Read.Group", "type": "Application" },
-        { "name": "ChatMessage.Read.Chat", "type": "Application" }
-      ]
-    }
-  }
+  ]
 }
