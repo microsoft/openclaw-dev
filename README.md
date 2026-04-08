@@ -137,55 +137,30 @@ az containerapp update --name <app-name> --resource-group <rg> \
 
 ## Teams Setup
 
-Connect OpenClaw to Microsoft Teams so you can chat with it from your phone.
+Connect OpenClaw to Microsoft Teams so you can chat with it from your phone. The Azure Bot and Teams channel are provisioned automatically by `msftclaw up` — no Portal steps needed.
 
-### Step 1: Create an Azure Bot
-
-1. Go to [Azure Portal → Create Azure Bot](https://portal.azure.com/#create/Microsoft.AzureBot)
-2. **Bot handle**: `openclaw-bot`
-3. **Type of App**: Single Tenant
-4. **Creation type**: Create new Microsoft App ID
-5. Click **Create**
-
-After creation:
-- **Configuration** → copy the **Microsoft App ID**
-- **Configuration** → **Manage Password** → **New client secret** → copy the **Value**
-- Note your **Tenant ID** (Azure Portal top-right → Directory ID)
-- **Channels** → Add **Microsoft Teams** → Save
-
-### Step 2: Set the messaging endpoint
-
-Azure Bot → **Configuration** → **Messaging endpoint**:
-
-```
-https://<your-fqdn>/api/messages
-```
-
-Get your FQDN from `msftclaw status`.
-
-### Step 3: Configure OpenClaw
+### Step 1: Generate the Teams app package
 
 ```bash
 msftclaw teams
 ```
 
-This prompts for App ID, Client Secret, and Tenant ID, then updates the config and redeploys.
+This reads the bot identity from your deployment and generates `teams/openclaw-teams-app.zip`.
 
-### Step 4: Install the Teams app
+### Step 2: Install in Teams
 
-1. Edit `teams/manifest.json` — replace `APP_ID_PLACEHOLDER` with your Bot App ID
-2. Add icon files: `color.png` (192×192) and `outline.png` (32×32) in `teams/`
-3. ZIP the three files together
-4. In Teams → **Apps** → **Manage your apps** → **Upload a custom app** → select the ZIP
-5. **Add** the app → send a message
+1. Open Microsoft Teams
+2. **Apps** → **Manage your apps** → **Upload a custom app**
+3. Select `teams/openclaw-teams-app.zip`
+4. Click **Add**
 
-### Step 5: Test from mobile
+### Step 3: Test from mobile
 
-1. Open Microsoft Teams on your phone
+1. Open Teams on your phone
 2. Search for "OpenClaw"
 3. Start a DM → send: `Hello!`
 
-If scaled to 0, the first message takes ~60s while the container starts.
+If the container is stopped, the first message takes ~60s while it starts up.
 
 ### Demo: Talk to a GitHub repo
 

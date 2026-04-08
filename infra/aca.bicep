@@ -227,3 +227,40 @@ output AZURE_CONTAINER_REGISTRY_ENDPOINT string = acr.properties.loginServer
 output AZURE_CONTAINER_REGISTRY_NAME string = acr.name
 output CONTAINER_APP_FQDN string = containerApp.properties.configuration.ingress.fqdn
 output CONTAINER_APP_NAME string = containerApp.name
+
+// ---------------------------------------------------------------------------
+// Azure Bot Service — uses the Container App's managed identity (no client secret)
+// Enables Microsoft Teams channel automatically
+// ---------------------------------------------------------------------------
+resource bot 'Microsoft.BotService/botServices@2022-09-15' = {
+  name: 'bot-${resourceToken}'
+  location: 'global'
+  kind: 'azurebot'
+  sku: { name: 'F0' }
+  tags: { 'azd-env-name': environmentName }
+  properties: {
+    displayName: 'OpenClaw'
+    description: 'OpenClaw AI assistant on Azure'
+    endpoint: 'https://${containerApp.properties.configuration.ingress.fqdn}/api/messages'
+    msaAppId: containerApp.identity.principalId
+    msaAppType: 'ManagedIdentity'
+    msaAppMSIResourceId: containerApp.id
+    msaAppTenantId: subscription().tenantId
+  }
+}
+
+// Enable Microsoft Teams channel on the bot
+resource teamsChannel 'Microsoft.BotService/botServices/channels@2022-09-15' = {
+  parent: bot
+  name: 'MsTeamsChannel'
+  location: 'global'
+  properties: {
+    channelName: 'MsTeamsChannel'
+    properties: {
+      isEnabled: true
+    }
+  }
+}
+
+output BOT_APP_ID string = containerApp.identity.principalId
+output BOT_NAME string = bot.name
