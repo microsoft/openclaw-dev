@@ -21,10 +21,10 @@ sed -i "s|\${MSTEAMS_APP_ID}|${MSTEAMS_APP_ID}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_APP_PASSWORD}|${MSTEAMS_APP_PASSWORD}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_TENANT_ID}|${MSTEAMS_TENANT_ID}|g" /root/.openclaw/openclaw.json
 
-# Auto-redirect to chat with password pre-filled via URL param (Easy Auth handles real auth)
+# Auto-set password via hash fragment (Easy Auth handles real auth)
 CONTROL_UI="/usr/local/lib/node_modules/openclaw/dist/control-ui/index.html"
 if [ -f "$CONTROL_UI" ]; then
-    sed -i 's|</body>|<script>if(!location.search.includes("password=")\&\&!location.hash.includes("password=")){location.replace(location.pathname+"?session=main\&password=passwordless-protection-with-easyauth")}</script></body>|' "$CONTROL_UI"
+    sed -i 's|</body>|<script>if(!location.hash.includes("password=")){location.hash="password=passwordless-protection-with-easyauth"}</script></body>|' "$CONTROL_UI"
 fi
 
 echo "[openclaw] Config: $(cat /root/.openclaw/openclaw.json)"
