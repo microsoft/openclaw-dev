@@ -3,6 +3,12 @@ metadata:
   template: openclaw-azure@0.0.1
   description: OpenClaw AI assistant on Azure Container Apps with Azure OpenAI (v1 API)
 
+hooks:
+  preprovision:
+    shell: sh
+    run: ./infra/hooks/preprovision.sh
+    continueOnError: false
+
 services:
   openclaw:
     host: containerapp

@@ -137,36 +137,30 @@ az containerapp update --name <app-name> --resource-group <rg> \
 
 ## Teams Setup
 
-Connect OpenClaw to Microsoft Teams so you can chat with it from your phone. The Azure Bot and Teams channel are provisioned automatically by `msftclaw up` — no Portal steps needed.
+Connect OpenClaw to Microsoft Teams so you can chat with it from your phone.
 
-### Step 1: Generate the Teams app package
+### Step 1: Create an Azure Bot
+
+1. Go to [Azure Portal → Create Azure Bot](https://portal.azure.com/#create/Microsoft.AzureBot)
+2. **Bot handle**: `openclaw-bot`, **Type**: Single Tenant, click **Create**
+3. Copy the **Microsoft App ID** from Configuration
+4. Create a **Client Secret** (Configuration → Manage Password → New)
+5. Note your **Tenant ID** (Portal top-right → Directory ID)
+6. **Channels** → Add **Microsoft Teams** → Save
+7. Set **Messaging endpoint** to: `https://<your-fqdn>/api/messages` (get FQDN from `msftclaw status`)
+
+### Step 2: Configure and deploy
 
 ```bash
-msftclaw teams
+msftclaw teams    # prompts for App ID, Secret, Tenant ID
+msftclaw deploy   # redeploys with Teams config
 ```
 
-This reads the bot identity from your deployment and generates `teams/openclaw-teams-app.zip`.
+### Step 3: Install in Teams
 
-### Step 2: Install in Teams
-
-1. Open Microsoft Teams
-2. **Apps** → **Manage your apps** → **Upload a custom app**
-3. Select `teams/openclaw-teams-app.zip`
-4. Click **Add**
-
-### Step 3: Test from mobile
-
-1. Open Teams on your phone
-2. Search for "OpenClaw"
-3. Start a DM → send: `Hello!`
-
-If the container is stopped, the first message takes ~60s while it starts up.
-
-### Demo: Talk to a GitHub repo
-
-```
-Review the README at https://github.com/<your-user>/<your-repo>
-```
+1. Teams → **Apps** → **Manage your apps** → **Upload a custom app**
+2. Select `teams/openclaw-teams-app.zip`
+3. **Add** → DM the bot to test
 
 ```
 Summarize the latest commits on https://github.com/<your-user>/<your-repo>

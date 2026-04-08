@@ -16,6 +16,16 @@ param openaiDeploymentName string
 @description('Azure OpenAI resource ID (for role assignment scoping)')
 param openaiResourceId string
 
+@description('Bot App Registration ID (from preprovision hook)')
+param botAppId string = ''
+
+@description('Bot App Registration Secret')
+@secure()
+param botAppSecret string = ''
+
+@description('Bot Tenant ID')
+param botTenantId string = ''
+
 // ---------------------------------------------------------------------------
 // Azure Container Registry
 // ---------------------------------------------------------------------------
@@ -229,10 +239,10 @@ output CONTAINER_APP_FQDN string = containerApp.properties.configuration.ingress
 output CONTAINER_APP_NAME string = containerApp.name
 
 // ---------------------------------------------------------------------------
-// Azure Bot Service — uses the Container App's managed identity (no client secret)
-// Enables Microsoft Teams channel automatically
+// Azure Bot Service (optional — only deployed if botAppId is provided)
+// Uses the Entra ID app registration created by the preprovision hook
 // ---------------------------------------------------------------------------
-resource bot 'Microsoft.BotService/botServices@2022-09-15' = {
+resource bot 'Microsoft.BotService/botServices@2022-09-15' = if (!empty(botAppId)) {
   name: 'bot-${resourceToken}'
   location: 'global'
   kind: 'azurebot'
@@ -242,15 +252,13 @@ resource bot 'Microsoft.BotService/botServices@2022-09-15' = {
     displayName: 'OpenClaw'
     description: 'OpenClaw AI assistant on Azure'
     endpoint: 'https://${containerApp.properties.configuration.ingress.fqdn}/api/messages'
-    msaAppId: containerApp.identity.principalId
-    msaAppType: 'ManagedIdentity'
-    msaAppMSIResourceId: containerApp.id
-    msaAppTenantId: subscription().tenantId
+    msaAppId: botAppId
+    msaAppType: 'SingleTenant'
+    msaAppTenantId: botTenantId
   }
 }
 
-// Enable Microsoft Teams channel on the bot
-resource teamsChannel 'Microsoft.BotService/botServices/channels@2022-09-15' = {
+resource teamsChannel 'Microsoft.BotService/botServices/channels@2022-09-15' = if (!empty(botAppId)) {
   parent: bot
   name: 'MsTeamsChannel'
   location: 'global'
@@ -262,5 +270,4 @@ resource teamsChannel 'Microsoft.BotService/botServices/channels@2022-09-15' = {
   }
 }
 
-output BOT_APP_ID string = containerApp.identity.principalId
-output BOT_NAME string = bot.name
+output BOT_APP_ID string = botAppId

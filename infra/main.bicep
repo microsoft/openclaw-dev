@@ -29,6 +29,16 @@ param location string
 @description('Unique token for resource naming')
 param resourceToken string = toLower(uniqueString(subscription().id, environmentName, location))
 
+@description('Bot App Registration ID (created by preprovision hook)')
+param botAppId string = ''
+
+@description('Bot App Registration Secret (created by preprovision hook)')
+@secure()
+param botAppSecret string = ''
+
+@description('Bot Tenant ID')
+param botTenantId string = subscription().tenantId
+
 // ---------------------------------------------------------------------------
 // 1. Azure OpenAI — GPT-5-mini via the v1 API (from aka.ms/openai/start)
 // ---------------------------------------------------------------------------
@@ -57,6 +67,9 @@ module aca 'aca.bicep' = {
     openaiEndpoint: openai.outputs.AZURE_OPENAI_ENDPOINT
     openaiDeploymentName: openai.outputs.AZURE_OPENAI_GPT_DEPLOYMENT_NAME
     openaiResourceId: openai.outputs.AZURE_OPENAI_RESOURCE_ID
+    botAppId: botAppId
+    botAppSecret: botAppSecret
+    botTenantId: botTenantId
   }
 }
 

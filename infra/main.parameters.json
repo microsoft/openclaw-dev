@@ -7,6 +7,15 @@
     },
     "location": {
       "value": "${AZURE_LOCATION}"
+    },
+    "botAppId": {
+      "value": "${BOT_APP_ID}"
+    },
+    "botAppSecret": {
+      "value": "${BOT_APP_SECRET}"
+    },
+    "botTenantId": {
+      "value": "${BOT_TENANT_ID}"
     }
   }
 }
