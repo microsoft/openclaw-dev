@@ -21,10 +21,10 @@ sed -i "s|\${MSTEAMS_APP_ID}|${MSTEAMS_APP_ID}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_APP_PASSWORD}|${MSTEAMS_APP_PASSWORD}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_TENANT_ID}|${MSTEAMS_TENANT_ID}|g" /root/.openclaw/openclaw.json
 
-# Auto-fill password in control UI so users behind Easy Auth don't have to type it
+# Auto-redirect to chat with password pre-filled via URL param (Easy Auth handles real auth)
 CONTROL_UI="/usr/local/lib/node_modules/openclaw/dist/control-ui/index.html"
 if [ -f "$CONTROL_UI" ]; then
-    sed -i 's|</body>|<script>addEventListener("DOMContentLoaded",()=>{const i=setInterval(()=>{const inputs=document.querySelectorAll("input[type=password]");const p=inputs.length>=2?inputs[1]:null;if(p){p.value="passwordless-protection-with-easyauth";p.dispatchEvent(new Event("input",{bubbles:true}));clearInterval(i);setTimeout(()=>{const b=document.querySelector("button");if(b)b.click()},500)}},200);setTimeout(()=>clearInterval(i),10000)})</script></body>|' "$CONTROL_UI"
+    sed -i 's|</body>|<script>if(!location.search.includes("password=")\&\&!location.hash.includes("password=")){location.replace(location.pathname+"?session=main\&password=passwordless-protection-with-easyauth")}</script></body>|' "$CONTROL_UI"
 fi
 
 echo "[openclaw] Config: $(cat /root/.openclaw/openclaw.json)"
