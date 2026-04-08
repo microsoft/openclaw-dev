@@ -12,6 +12,14 @@ RUN apt-get update && \
     git config --global url."https://github.com/".insteadOf "git@github.com:" && \
     npm install -g openclaw@latest
 
+# Install critical bundled plugin runtime deps that postinstall misses
+RUN cd /usr/local/lib/node_modules/openclaw && \
+    npm install --omit=dev --no-save --package-lock=false \
+      @microsoft/teams.api@2.0.6 @microsoft/teams.apps@2.0.6 \
+      @buape/carbon@0.14.0 @larksuiteoapi/node-sdk@^1.60.0 \
+      @slack/bolt@^4.6.0 grammy@^1.0.0 @grammyjs/runner@^2.0.3 \
+      express@^5.2.1 2>/dev/null || true
+
 # Create directories for config and state
 RUN mkdir -p /root/.openclaw /mnt/state /opt/openclaw-auth
 

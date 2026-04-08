@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.23/MicrosoftTeams.schema.json",
   "manifestVersion": "1.23",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "id": "604445c5-d8ca-46f0-9567-6de6e7d13af6",
   "name": { "short": "OpenClaw", "full": "OpenClaw AI Assistant" },
   "developer": {
@@ -25,5 +25,8 @@
       "supportsVideo": false,
       "supportsFiles": true
     }
-  ]
+  ],
+  "webApplicationInfo": {
+    "id": "604445c5-d8ca-46f0-9567-6de6e7d13af6"
+  }
 }

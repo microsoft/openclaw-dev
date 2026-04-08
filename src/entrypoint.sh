@@ -17,6 +17,9 @@ cp -f /opt/openclaw.json.canonical /root/.openclaw/openclaw.json
 
 # Substitute env vars in config
 sed -i "s|\${OPENAI_BASE_URL}|${OPENAI_BASE_URL}|g" /root/.openclaw/openclaw.json
+sed -i "s|\${MSTEAMS_APP_ID}|${MSTEAMS_APP_ID}|g" /root/.openclaw/openclaw.json
+sed -i "s|\${MSTEAMS_APP_PASSWORD}|${MSTEAMS_APP_PASSWORD}|g" /root/.openclaw/openclaw.json
+sed -i "s|\${MSTEAMS_TENANT_ID}|${MSTEAMS_TENANT_ID}|g" /root/.openclaw/openclaw.json
 
 echo "[openclaw] Config: $(cat /root/.openclaw/openclaw.json)"
 

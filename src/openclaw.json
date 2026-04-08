@@ -12,7 +12,13 @@
   },
   "channels": {
     "msteams": {
-      "enabled": true
+      "enabled": true,
+      "appId": "${MSTEAMS_APP_ID}",
+      "appPassword": "${MSTEAMS_APP_PASSWORD}",
+      "tenantId": "${MSTEAMS_TENANT_ID}",
+      "webhook": {
+        "port": 3978
+      }
     }
   },
   "models": {
