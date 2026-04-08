@@ -5,8 +5,12 @@ metadata:
 
 hooks:
   preprovision:
-    shell: sh
-    run: ./infra/hooks/preprovision.sh
+    windows:
+      shell: pwsh
+      run: ./infra/hooks/preprovision.ps1
+    posix:
+      shell: sh
+      run: ./infra/hooks/preprovision.sh
     continueOnError: false
 
 services:
