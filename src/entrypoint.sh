@@ -22,7 +22,8 @@ sed -i "s|\${MSTEAMS_APP_PASSWORD}|${MSTEAMS_APP_PASSWORD}|g" /root/.openclaw/op
 sed -i "s|\${MSTEAMS_TENANT_ID}|${MSTEAMS_TENANT_ID}|g" /root/.openclaw/openclaw.json
 
 # Gateway token for auth (used by both --token flag and SPA auto-connect)
-GATEWAY_TOKEN="easyauth-auto-connect"
+# Generate a random token per container start for defense-in-depth
+GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-$(head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 32)}"
 
 # Inject token into URL hash BEFORE any SPA scripts load
 # The SPA reads #token=<value>, saves it to settings, and auto-connects
@@ -32,7 +33,7 @@ if [ -f "$CONTROL_UI" ]; then
     echo "[openclaw] Injected auto-connect token into control UI HTML"
 fi
 
-echo "[openclaw] Config: $(cat /root/.openclaw/openclaw.json)"
+echo "[openclaw] Config loaded (details redacted from logs)"
 
 if [ "${AZURE_OPENAI_AUTH}" = "managed-identity" ]; then
     echo "[openclaw] Using managed identity — acquiring token..."

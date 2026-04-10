@@ -5,7 +5,8 @@
     "controlUi": {
       "enabled": true,
       "allowedOrigins": ["*"],
-      "dangerouslyAllowHostHeaderOriginFallback": true
+      "dangerouslyAllowHostHeaderOriginFallback": true,
+      "dangerouslyDisableDeviceAuth": true
     }
   },
   "agents": {

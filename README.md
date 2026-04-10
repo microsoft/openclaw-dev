@@ -48,7 +48,7 @@ msftclaw test
 
 ### Open the WebChat UI
 
-After deployment, open the URL from `msftclaw status` in your browser. The default gateway password is `openclaw-azure-test` (change it — see [Security](#changing-the-gateway-password)).
+After deployment, open the URL from `msftclaw status` in your browser. If Entra ID Easy Auth is configured, you'll be prompted to sign in with your Microsoft account — after that the chat UI loads automatically with no further credentials needed.
 
 ## CLI reference
 
@@ -83,21 +83,24 @@ Your own **always-on AI assistant** — accessible from Teams on your phone, the
 | **Azure Container Apps** | Hosts OpenClaw gateway — public HTTPS, ephemeral container |
 | **Azure OpenAI (GPT-5-mini)** | LLM backend via `/openai/v1/` — keyless (`disableLocalAuth: true`) |
 | **Managed Identity** | Container → OpenAI auth via short-lived Entra ID tokens |
+| **Entra ID Easy Auth** | Microsoft login required before reaching the gateway |
 | **Azure Files** | Persists credentials, workspace, sessions across restarts |
 | **Container Registry** | Stores the container image |
 | **Log Analytics** | Container and gateway logs |
 
 ```mermaid
 graph LR
-    User["👤 User<br/>Teams / WebChat / Mobile"]
+    User["👤 User<br/>Browser / Mobile"]
+    EasyAuth["🔐 Entra ID Easy Auth<br/>Microsoft login gate"]
     subgraph ACA["Azure Container Apps"]
-        GW["🦞 OpenClaw Gateway<br/>:18789 · password auth"]
+        GW["🦞 OpenClaw Gateway<br/>:18789 · token auth"]
     end
     AOAI["Azure OpenAI<br/>GPT-5-mini<br/>disableLocalAuth: true"]
     MI["Managed Identity<br/>Entra ID token"]
     AF["Azure Files<br/>credentials / workspace / sessions"]
 
-    User -->|"HTTPS"| GW
+    User -->|"HTTPS"| EasyAuth
+    EasyAuth -->|"Authenticated"| GW
     GW -->|"Bearer token"| AOAI
     GW -.->|"Volume mount"| AF
     MI -.->|"RBAC: Cognitive Services User"| AOAI
@@ -105,27 +108,44 @@ graph LR
 
 ## Security
 
-### What this template does
+### Defense in depth
 
-| Risk | Mitigation |
+This template applies **four independent layers** of security. An attacker must defeat all of them to reach the AI backend:
+
+| Layer | What it does |
 |---|---|
-| Run on work laptop | ✅ Isolated ACA container — no host access |
-| API keys stolen | ✅ No keys exist. `disableLocalAuth: true` + managed identity |
-| Machine compromised | ✅ Ephemeral. `msftclaw down && msftclaw up` = clean slate |
-| Credentials on disk | ✅ Managed identity injected by platform. No secrets in code |
+| **1. Entra ID Easy Auth** | Microsoft login required before any request reaches the container. Unauthenticated requests get a 401. Configurable to your tenant only. |
+| **2. Gateway token** | A random per-container token is injected into the SPA at startup. Even an authenticated user cannot call the WebSocket API without it. |
+| **3. Managed Identity (no API keys)** | The container authenticates to Azure OpenAI via short-lived Entra ID tokens. `disableLocalAuth: true` means API keys don't even exist. |
+| **4. Ephemeral container** | State is on Azure Files; the container itself is disposable. `msftclaw down && msftclaw up` = clean slate in 6 minutes. |
 
 ### What to be aware of
 
-- **Public FQDN** — gateway is password-protected but discoverable. Add Azure Front Door / WAF for hardening
 - **Skills run arbitrary code** — a malicious skill can access the managed identity. Only install trusted skills
 - **Prompt injection** — OpenClaw is susceptible. Nuke and repave if behavior changes
 - **Container runs as root** — add a non-root user for hardened deployments
+- **Conversations flow through Azure OpenAI** — don't paste highly sensitive data
 
-### Changing the gateway password
+### Adding Entra ID Easy Auth
+
+To add Microsoft login as a gate in front of your deployment:
 
 ```bash
-az containerapp update --name <app-name> --resource-group <rg> \
-  --set-env-vars "OPENCLAW_GATEWAY_PASSWORD=your-strong-password"
+# 1. Create an Entra ID app registration
+az ad app create --display-name "OpenClaw EasyAuth" --sign-in-audience AzureADMyOrg \
+  --web-redirect-uris "https://<your-fqdn>/.auth/login/aad/callback" \
+  --enable-id-token-issuance true
+
+# 2. Enable Easy Auth on the Container App
+az containerapp auth microsoft update \
+  --name <app-name> --resource-group <rg> \
+  --client-id <app-id> --issuer "https://login.microsoftonline.com/<tenant-id>/v2.0" \
+  --yes
+
+# 3. Set unauthenticated action to redirect
+az containerapp auth update \
+  --name <app-name> --resource-group <rg> \
+  --unauthenticated-client-action RedirectToLoginPage
 ```
 
 ### Usage guidelines
@@ -192,7 +212,9 @@ OpenClaw will browse the repo and respond in Teams.
 | Symptom | Cause | Fix |
 |---|---|---|
 | HTTP 500 on all routes | Missing plugin deps | Rebuild with `docker build --no-cache ./src` |
-| Can't access WebChat UI | Wrong password | Default: `openclaw-azure-test`. Set via `OPENCLAW_GATEWAY_PASSWORD` env var |
+| `pairing required` | Missing `dangerouslyDisableDeviceAuth` or `trustedProxies` in config | Ensure `src/openclaw.json` has both settings (see repo) |
+| `Proxy headers detected from untrusted address` | Reverse proxy not trusted | Add `gateway.trustedProxies` with your proxy CIDRs |
+| WebChat shows login screen | Token not injected | Check `entrypoint.sh` runs successfully — see `msftclaw logs` |
 
 ### CLI issues
 
