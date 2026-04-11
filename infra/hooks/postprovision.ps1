@@ -2,13 +2,13 @@
 # with the actual Container App FQDN (only known after Bicep provisioning).
 $ErrorActionPreference = "Stop"
 
-$authAppId = azd env get-value EASYAUTH_APP_ID 2>$null
+$authAppId = (azd env get-value EASYAUTH_APP_ID 2>$null) -replace '\s+ERROR:.*','' | Where-Object { $_ -match '^[0-9a-f-]+$' }
 if (-not $authAppId) {
     Write-Host "[postprovision] No EASYAUTH_APP_ID — skipping redirect URI update"
     exit 0
 }
 
-$fqdn = azd env get-value CONTAINER_APP_FQDN 2>$null
+$fqdn = (azd env get-value CONTAINER_APP_FQDN 2>$null) -replace '\s+ERROR:.*','' | Where-Object { $_ -match '\.' }
 if (-not $fqdn) {
     Write-Host "[postprovision] No CONTAINER_APP_FQDN — skipping redirect URI update"
     exit 0

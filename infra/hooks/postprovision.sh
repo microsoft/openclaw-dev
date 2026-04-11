@@ -3,13 +3,13 @@
 # with the actual Container App FQDN (only known after Bicep provisioning).
 set -euo pipefail
 
-AUTH_APP_ID=$(azd env get-value EASYAUTH_APP_ID 2>/dev/null || echo "")
+AUTH_APP_ID=$(azd env get-value EASYAUTH_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
 if [ -z "$AUTH_APP_ID" ]; then
     echo "[postprovision] No EASYAUTH_APP_ID — skipping redirect URI update"
     exit 0
 fi
 
-FQDN=$(azd env get-value CONTAINER_APP_FQDN 2>/dev/null || echo "")
+FQDN=$(azd env get-value CONTAINER_APP_FQDN 2>/dev/null | grep -oP '^[a-z0-9.-]+$' || echo "")
 if [ -z "$FQDN" ]; then
     echo "[postprovision] No CONTAINER_APP_FQDN — skipping redirect URI update"
     exit 0

@@ -8,7 +8,7 @@ ENV_NAME="${AZURE_ENV_NAME:-}"
 echo "[preprovision] Creating bot app registration for environment: $ENV_NAME"
 
 # Check if we already have a bot app ID saved
-EXISTING_APP_ID=$(azd env get-value BOT_APP_ID 2>/dev/null || echo "")
+EXISTING_APP_ID=$(azd env get-value BOT_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
 if [ -n "$EXISTING_APP_ID" ]; then
     echo "[preprovision] Bot app registration already exists: $EXISTING_APP_ID"
     exit 0
@@ -57,7 +57,7 @@ echo "[preprovision]   Tenant ID: $TENANT_ID"
 # Easy Auth — Entra ID app registration for ACA built-in authentication
 # Forces Microsoft login before any request reaches the container
 # ---------------------------------------------------------------------------
-EXISTING_AUTH_ID=$(azd env get-value EASYAUTH_APP_ID 2>/dev/null || echo "")
+EXISTING_AUTH_ID=$(azd env get-value EASYAUTH_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
 if [ -n "$EXISTING_AUTH_ID" ]; then
     echo "[preprovision] Easy Auth app registration already exists: $EXISTING_AUTH_ID"
 else
