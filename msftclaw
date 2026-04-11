@@ -221,6 +221,11 @@ down)
         echo ""
         exit 0
     fi
+    # Clean up Entra app registrations before destroying Azure resources
+    BOT_ID=$(azd env get-value BOT_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
+    AUTH_ID=$(azd env get-value EASYAUTH_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
+    [ -n "$BOT_ID" ] && echo -e "  ${D}Deleting bot app registration: $BOT_ID${N}" && az ad app delete --id "$BOT_ID" 2>/dev/null
+    [ -n "$AUTH_ID" ] && echo -e "  ${D}Deleting Easy Auth app registration: $AUTH_ID${N}" && az ad app delete --id "$AUTH_ID" 2>/dev/null
     azd down --force --purge 2>/dev/null || azd down --force 2>/dev/null || true
     echo ""
     echo -e "  ${G}All resources deleted. Run 'msftclaw up' to deploy fresh.${N}"
