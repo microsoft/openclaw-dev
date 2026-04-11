@@ -44,6 +44,9 @@ if ($botAppId) {
     Write-Host "[preprovision] Bot app created: $botAppId (tenant: $tenantId)"
 }
 
+# Brief pause to avoid Entra ID throttling between app registrations
+Start-Sleep -Seconds 3
+
 # ---------------------------------------------------------------------------
 # 2. Easy Auth — Entra ID app registration for ACA built-in authentication
 #    Forces Microsoft login before any request reaches the container
@@ -59,6 +62,14 @@ if ($easyAuthAppId) {
         --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" `
         --enable-id-token-issuance true `
         --query appId -o tsv 2>$null
+    if (-not $easyAuthAppId) {
+        Write-Host "[preprovision] Retrying Easy Auth app creation after 5s..."
+        Start-Sleep -Seconds 5
+        $easyAuthAppId = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
+            --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" `
+            --enable-id-token-issuance true `
+            --query appId -o tsv 2>$null
+    }
     if (-not $easyAuthAppId) {
         Write-Host "[preprovision] ERROR: Failed to create Easy Auth app registration"
         exit 1
