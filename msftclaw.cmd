@@ -145,37 +145,57 @@ exit /b 0
 
 :teams
 echo.
-echo   Microsoft Teams Setup
-echo   ---------------------
+echo   Microsoft Teams Setup (automated)
+echo   ----------------------------------
 echo.
-echo   You need an Azure Bot registration:
-echo     1. Go to https://portal.azure.com/#create/Microsoft.AzureBot
-echo     2. Create a Single Tenant bot
-echo     3. Copy the App ID, Client Secret, and Tenant ID
-echo     4. Enable Microsoft Teams in the bot's Channels tab
+echo   Enabling Teams channel on Azure Bot...
+
+REM Get bot name and FQDN from the deployment
+for /f "tokens=*" %%i in ('azd env get-value CONTAINER_APP_FQDN 2^>nul') do set "FQDN=%%i"
+for /f "tokens=*" %%i in ('azd env get-value BOT_APP_ID 2^>nul') do set "BOT_ID=%%i"
+
+REM Find the bot resource name in the resource group
+for /f "tokens=*" %%i in ('az bot list --resource-group rg-%AZURE_ENV_NAME% --query "[0].name" -o tsv 2^>nul') do set "BOT_NAME=%%i"
+
+if "%BOT_NAME%"=="" (
+    echo   No Azure Bot found. Run 'msftclaw up' first.
+    exit /b 1
+)
+
+echo   Bot:      %BOT_NAME%
+echo   Endpoint: https://%FQDN%/api/messages
 echo.
-set /p BOT_APP_ID="  Azure Bot App ID: "
-set /p BOT_APP_PASSWORD="  Azure Bot Client Secret: "
-set /p BOT_TENANT_ID="  Tenant ID: "
-if "%BOT_APP_ID%"=="" goto :teams_missing
-if "%BOT_APP_PASSWORD%"=="" goto :teams_missing
-if "%BOT_TENANT_ID%"=="" goto :teams_missing
+
+REM Enable Teams channel (idempotent)
+az bot msteams create --name %BOT_NAME% --resource-group rg-%AZURE_ENV_NAME% -o none 2>nul
+if errorlevel 1 (
+    echo   Teams channel may already be enabled (this is OK^).
+) else (
+    echo   Teams channel enabled.
+)
+
+REM Build Teams app package
+echo   Building Teams app package...
+if not exist "teams\package" mkdir "teams\package"
+powershell -Command "(Get-Content teams\manifest.json) -replace 'APP_ID_PLACEHOLDER','%BOT_ID%' | Set-Content teams\package\manifest.json"
+
+if not exist "teams\package\color.png" (
+    echo   WARNING: teams\package\color.png missing - add a 192x192 PNG icon
+)
+if not exist "teams\package\outline.png" (
+    echo   WARNING: teams\package\outline.png missing - add a 32x32 PNG icon
+)
+
+REM Create ZIP
+powershell -Command "Compress-Archive -Path 'teams\package\manifest.json','teams\package\color.png','teams\package\outline.png' -DestinationPath 'teams\openclaw-teams-app.zip' -Force" 2>nul
+echo   Package: teams\openclaw-teams-app.zip
 echo.
-echo   Updating openclaw.json with Teams config...
-node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('src/openclaw.json'));c.channels=c.channels||{};c.channels.msteams={enabled:true,appId:'%BOT_APP_ID%',appPassword:'%BOT_APP_PASSWORD%',tenantId:'%BOT_TENANT_ID%',webhook:{port:3978,path:'/api/messages'},dmPolicy:'pairing',requireMention:true};fs.writeFileSync('src/openclaw.json',JSON.stringify(c,null,2)+'\n');"
-echo   Done. Now run 'msftclaw deploy' to apply.
-echo.
-echo   Next steps:
-echo     1. Set Azure Bot messaging endpoint to your public URL + /api/messages
-echo     2. Upload teams/openclaw-teams-app.zip to Teams
-echo     3. Run: msftclaw deploy
-echo     4. DM the bot in Teams to test
+echo   Install in Teams:
+echo     Teams ^> Apps ^> Manage your apps ^> Upload a custom app
+echo     Select: teams\openclaw-teams-app.zip
+echo     Add ^> DM the bot to test
 echo.
 exit /b 0
-
-:teams_missing
-echo   All three values are required.
-exit /b 1
 
 :help
 echo.

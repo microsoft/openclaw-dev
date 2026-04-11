@@ -239,62 +239,63 @@ deploy)
 
 teams)
     echo ""
-    echo -e "  ${C}Microsoft Teams Setup${N}"
-    echo -e "  ${C}---------------------${N}"
+    echo -e "  ${C}Microsoft Teams Setup (automated)${N}"
+    echo -e "  ${C}----------------------------------${N}"
     echo ""
 
-    # The Azure Bot + Teams channel are provisioned automatically by azd up.
-    # This command just generates the Teams app package for sideloading.
-
     get_app
-    TEAMS_DIR="$ROOT/teams"
 
-    # Get the bot App ID from the deployment
-    BOT_APP_ID=$(az containerapp show --name "$APP" --resource-group "$RG" \
-        --query "identity.principalId" -o tsv 2>/dev/null)
+    # Get bot resource name from resource group
+    BOT_NAME=$(az bot list --resource-group "$RG" --query "[0].name" -o tsv 2>/dev/null)
+    BOT_APP_ID=$(azd env get-value BOT_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
     FQDN=$(az containerapp show --name "$APP" --resource-group "$RG" \
         --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null)
 
-    if [ -z "$BOT_APP_ID" ]; then
-        echo -e "  ${R}Could not find bot identity. Run 'msftclaw up' first.${N}"
+    if [ -z "$BOT_NAME" ]; then
+        echo -e "  ${R}No Azure Bot found. Run 'msftclaw up' first.${N}"
         exit 1
     fi
 
-    echo -e "  Bot ID:   ${C}${BOT_APP_ID}${N}"
+    echo -e "  Bot:      ${C}${BOT_NAME}${N}"
     echo -e "  Endpoint: ${C}https://${FQDN}/api/messages${N}"
     echo ""
 
+    # Enable Teams channel (idempotent)
+    echo -e "  ${C}Enabling Teams channel...${N}"
+    az bot msteams create --name "$BOT_NAME" --resource-group "$RG" -o none 2>/dev/null || \
+        echo -e "  ${Y}Teams channel may already be enabled (OK)${N}"
+
     # Build Teams app manifest
+    TEAMS_DIR="$ROOT/teams"
     echo -e "  ${C}Building Teams app package...${N}"
     mkdir -p "$TEAMS_DIR/package"
 
     # Generate manifest with real App ID
-    sed "s/APP_ID_PLACEHOLDER/$BOT_APP_ID/g" "$TEAMS_DIR/manifest.json" > "$TEAMS_DIR/package/manifest.json"
+    if [ -n "$BOT_APP_ID" ]; then
+        sed "s/APP_ID_PLACEHOLDER/$BOT_APP_ID/g" "$TEAMS_DIR/manifest.json" > "$TEAMS_DIR/package/manifest.json"
+    else
+        cp "$TEAMS_DIR/manifest.json" "$TEAMS_DIR/package/manifest.json"
+        echo -e "  ${Y}Warning: BOT_APP_ID not found — manifest may need manual App ID${N}"
+    fi
 
-    # Create placeholder icons if they don't exist
-    if [ ! -f "$TEAMS_DIR/package/color.png" ]; then
-        printf '\x89PNG\r\n\x1a\n' > "$TEAMS_DIR/package/color.png"
-        echo -e "  ${Y}Placeholder color.png created — replace with a 192x192 icon${N}"
-    fi
-    if [ ! -f "$TEAMS_DIR/package/outline.png" ]; then
-        printf '\x89PNG\r\n\x1a\n' > "$TEAMS_DIR/package/outline.png"
-        echo -e "  ${Y}Placeholder outline.png created — replace with a 32x32 icon${N}"
-    fi
+    # Check icons exist
+    [ ! -f "$TEAMS_DIR/package/color.png" ] && echo -e "  ${Y}Warning: teams/package/color.png missing — add a 192x192 PNG icon${N}"
+    [ ! -f "$TEAMS_DIR/package/outline.png" ] && echo -e "  ${Y}Warning: teams/package/outline.png missing — add a 32x32 PNG icon${N}"
 
     # Create ZIP
     if command -v zip &>/dev/null; then
-        (cd "$TEAMS_DIR/package" && zip -q ../openclaw-teams-app.zip manifest.json color.png outline.png)
-        echo -e "  ${G}Teams app package: teams/openclaw-teams-app.zip${N}"
+        (cd "$TEAMS_DIR/package" && zip -q ../openclaw-teams-app.zip manifest.json color.png outline.png 2>/dev/null)
+        echo -e "  ${G}Package: teams/openclaw-teams-app.zip${N}"
     else
         echo -e "  ${Y}Install 'zip' to auto-create, or manually zip:${N}"
         echo -e "  ${D}  teams/package/manifest.json + color.png + outline.png${N}"
     fi
 
     echo ""
-    echo -e "  ${C}To install in Teams:${N}"
+    echo -e "  ${C}Install in Teams:${N}"
     echo -e "  ${D}  Teams > Apps > Manage your apps > Upload a custom app${N}"
     echo -e "  ${D}  Select: teams/openclaw-teams-app.zip${N}"
-    echo -e "  ${D}  Add the app > DM the bot to test${N}"
+    echo -e "  ${D}  Add > DM the bot to test${N}"
     echo ""
     ;;
 

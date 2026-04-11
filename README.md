@@ -146,34 +146,21 @@ To restrict access to specific users or groups, update the app registration in t
 
 Connect OpenClaw to Microsoft Teams so you can chat with it from your phone.
 
-### Step 1: Create an Azure Bot
-
-1. Go to [Azure Portal → Create Azure Bot](https://portal.azure.com/#create/Microsoft.AzureBot)
-2. **Bot handle**: `openclaw-bot`, **Type**: Single Tenant, click **Create**
-3. Copy the **Microsoft App ID** from Configuration
-4. Create a **Client Secret** (Configuration → Manage Password → New)
-5. Note your **Tenant ID** (Portal top-right → Directory ID)
-6. **Channels** → Add **Microsoft Teams** → Save
-7. Set **Messaging endpoint** to: `https://<your-fqdn>/api/messages` (get FQDN from `msftclaw status`)
-
-### Step 2: Configure and deploy
+### Step 1: Enable Teams and build the app package
 
 ```bash
-msftclaw teams    # prompts for App ID, Secret, Tenant ID
-msftclaw deploy   # redeploys with Teams config
+msftclaw teams
 ```
 
-### Step 3: Install in Teams
+This automatically:
+- Enables the Microsoft Teams channel on your Azure Bot (created by `msftclaw up`)
+- Builds a sideloadable Teams app package (`teams/openclaw-teams-app.zip`)
+
+### Step 2: Install in Teams
 
 1. Teams → **Apps** → **Manage your apps** → **Upload a custom app**
 2. Select `teams/openclaw-teams-app.zip`
 3. **Add** → DM the bot to test
-
-```
-Summarize the latest commits on https://github.com/<your-user>/<your-repo>
-```
-
-OpenClaw will browse the repo and respond in Teams.
 
 ## Troubleshooting
 
