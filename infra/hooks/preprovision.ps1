@@ -42,3 +42,28 @@ azd env set BOT_TENANT_ID $tenantId
 Write-Host "[preprovision] Bot app registration created and saved to azd env"
 Write-Host "[preprovision]   App ID:    $appId"
 Write-Host "[preprovision]   Tenant ID: $tenantId"
+
+# ---------------------------------------------------------------------------
+# Easy Auth — Entra ID app registration for ACA built-in authentication
+# Forces Microsoft login before any request reaches the container
+# ---------------------------------------------------------------------------
+$existingAuthId = azd env get-value EASYAUTH_APP_ID 2>$null
+if ($existingAuthId) {
+    Write-Host "[preprovision] Easy Auth app registration already exists: $existingAuthId"
+} else {
+    $authAppName = "openclaw-auth-$envName"
+    Write-Host "[preprovision] Creating Easy Auth app registration: $authAppName"
+
+    # Create with placeholder redirect URI (updated after Bicep creates the container app)
+    $authAppId = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
+        --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" `
+        --enable-id-token-issuance true `
+        --query appId -o tsv 2>$null
+    if (-not $authAppId) {
+        Write-Host "[preprovision] ERROR: Failed to create Easy Auth app registration"
+        exit 1
+    }
+
+    azd env set EASYAUTH_APP_ID $authAppId
+    Write-Host "[preprovision] Easy Auth app ID: $authAppId"
+}

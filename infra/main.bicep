@@ -39,6 +39,9 @@ param botAppSecret string = ''
 @description('Bot Tenant ID')
 param botTenantId string = subscription().tenantId
 
+@description('Easy Auth App Registration ID (created by preprovision hook)')
+param easyAuthAppId string = ''
+
 // ---------------------------------------------------------------------------
 // 1. Azure OpenAI — GPT-5-mini via the v1 API (from aka.ms/openai/start)
 // ---------------------------------------------------------------------------
@@ -70,6 +73,7 @@ module aca 'aca.bicep' = {
     botAppId: botAppId
     botAppSecret: botAppSecret
     botTenantId: botTenantId
+    easyAuthAppId: easyAuthAppId
   }
 }
 

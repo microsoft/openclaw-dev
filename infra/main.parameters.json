@@ -16,6 +16,9 @@
     },
     "botTenantId": {
       "value": "${BOT_TENANT_ID}"
+    },
+    "easyAuthAppId": {
+      "value": "${EASYAUTH_APP_ID}"
     }
   }
 }

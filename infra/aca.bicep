@@ -26,6 +26,9 @@ param botAppSecret string = ''
 @description('Bot Tenant ID')
 param botTenantId string = ''
 
+@description('Easy Auth App Registration ID (for Entra ID login gate)')
+param easyAuthAppId string = ''
+
 // ---------------------------------------------------------------------------
 // Azure Container Registry
 // ---------------------------------------------------------------------------
@@ -205,6 +208,38 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       scale: {
         minReplicas: 1
         maxReplicas: 1
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Easy Auth — Entra ID login gate (requires Microsoft login before any request)
+// Only deployed if easyAuthAppId is provided by the preprovision hook
+// ---------------------------------------------------------------------------
+resource containerAppAuth 'Microsoft.App/containerApps/authConfigs@2024-03-01' = if (!empty(easyAuthAppId)) {
+  parent: containerApp
+  name: 'current'
+  properties: {
+    platform: {
+      enabled: true
+    }
+    globalValidation: {
+      unauthenticatedClientAction: 'RedirectToLoginPage'
+      redirectToProvider: 'azureactivedirectory'
+    }
+    identityProviders: {
+      azureActiveDirectory: {
+        enabled: true
+        registration: {
+          clientId: easyAuthAppId
+          openIdIssuer: 'https://sts.windows.net/${subscription().tenantId}/v2.0'
+        }
+        validation: {
+          allowedAudiences: [
+            'api://${easyAuthAppId}'
+          ]
+        }
       }
     }
   }

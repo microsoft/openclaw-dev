@@ -114,7 +114,7 @@ This template applies **four independent layers** of security. An attacker must 
 
 | Layer | What it does |
 |---|---|
-| **1. Entra ID Easy Auth** | Microsoft login required before any request reaches the container. Unauthenticated requests get a 401. Configurable to your tenant only. |
+| **1. Entra ID Easy Auth** | Microsoft login required before any request reaches the container. Deployed automatically by `msftclaw up`. Unauthenticated requests get a 401. Scoped to your tenant. |
 | **2. Gateway token** | A random per-container token is injected into the SPA at startup. Even an authenticated user cannot call the WebSocket API without it. |
 | **3. Managed Identity (no API keys)** | The container authenticates to Azure OpenAI via short-lived Entra ID tokens. `disableLocalAuth: true` means API keys don't even exist. |
 | **4. Ephemeral container** | State is on Azure Files; the container itself is disposable. `msftclaw down && msftclaw up` = clean slate in 6 minutes. |
@@ -128,25 +128,12 @@ This template applies **four independent layers** of security. An attacker must 
 
 ### Adding Entra ID Easy Auth
 
-To add Microsoft login as a gate in front of your deployment:
+Easy Auth is configured automatically by `msftclaw up`. The preprovision hook creates an Entra ID app registration, Bicep enables the auth config on the Container App, and the postprovision hook updates the redirect URI. No manual steps needed.
 
-```bash
-# 1. Create an Entra ID app registration
-az ad app create --display-name "OpenClaw EasyAuth" --sign-in-audience AzureADMyOrg \
-  --web-redirect-uris "https://<your-fqdn>/.auth/login/aad/callback" \
-  --enable-id-token-issuance true
-
-# 2. Enable Easy Auth on the Container App
-az containerapp auth microsoft update \
-  --name <app-name> --resource-group <rg> \
-  --client-id <app-id> --issuer "https://login.microsoftonline.com/<tenant-id>/v2.0" \
-  --yes
-
-# 3. Set unauthenticated action to redirect
-az containerapp auth update \
-  --name <app-name> --resource-group <rg> \
-  --unauthenticated-client-action RedirectToLoginPage
-```
+To restrict access to specific users or groups, update the app registration in the Azure Portal:
+1. **Azure Portal** → **Entra ID** → **App registrations** → `openclaw-auth-<env>`
+2. **Properties** → **Assignment required?** → **Yes**
+3. **Enterprise applications** → assign specific users/groups
 
 ### Usage guidelines
 

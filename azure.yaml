@@ -12,6 +12,14 @@ hooks:
       shell: sh
       run: ./infra/hooks/preprovision.sh
     continueOnError: false
+  postprovision:
+    windows:
+      shell: pwsh
+      run: ./infra/hooks/postprovision.ps1
+    posix:
+      shell: sh
+      run: ./infra/hooks/postprovision.sh
+    continueOnError: true
 
 services:
   openclaw:
