@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 REM msftclaw.cmd - OpenClaw in the Microsoft Cloud (Windows)
 REM Wraps the bash script for cmd/PowerShell use
 set "AZURE_CONFIG_DIR=%~dp0.azure"
@@ -153,9 +154,16 @@ echo   Enabling Teams channel on Azure Bot...
 REM Get bot name and FQDN from the deployment
 for /f "tokens=*" %%i in ('azd env get-value CONTAINER_APP_FQDN 2^>nul') do set "FQDN=%%i"
 for /f "tokens=*" %%i in ('azd env get-value BOT_APP_ID 2^>nul') do set "BOT_ID=%%i"
+for /f "tokens=*" %%i in ('azd env get-value AZURE_RESOURCE_GROUP 2^>nul') do set "RG=%%i"
+
+REM Fallback: derive RG from env name if AZURE_RESOURCE_GROUP not set
+if "%RG%"=="" (
+    for /f "tokens=*" %%i in ('azd env get-value AZURE_ENV_NAME 2^>nul') do set "ENV_NAME=%%i"
+    if not "!ENV_NAME!"=="" set "RG=rg-!ENV_NAME!"
+)
 
 REM Find the bot resource name in the resource group
-for /f "tokens=*" %%i in ('az bot list --resource-group rg-%AZURE_ENV_NAME% --query "[0].name" -o tsv 2^>nul') do set "BOT_NAME=%%i"
+for /f "tokens=*" %%i in ('az resource list --resource-group %RG% --resource-type "Microsoft.BotService/botServices" --query "[0].name" -o tsv 2^>nul') do set "BOT_NAME=%%i"
 
 if "%BOT_NAME%"=="" (
     echo   No Azure Bot found. Run 'msftclaw up' first.
@@ -166,13 +174,11 @@ echo   Bot:      %BOT_NAME%
 echo   Endpoint: https://%FQDN%/api/messages
 echo.
 
-REM Enable Teams channel (idempotent)
-az bot msteams create --name %BOT_NAME% --resource-group rg-%AZURE_ENV_NAME% -o none 2>nul
-if errorlevel 1 (
-    echo   Teams channel may already be enabled (this is OK^).
-) else (
-    echo   Teams channel enabled.
-)
+REM Enable Teams channel via REST API (az bot msteams hangs in batch scripts)
+echo   Enabling Teams channel...
+for /f "tokens=*" %%i in ('az account show --query id -o tsv 2^>nul') do set "SUB_ID=%%i"
+echo. | az rest --method PUT --url "https://management.azure.com/subscriptions/%SUB_ID%/resourceGroups/%RG%/providers/Microsoft.BotService/botServices/%BOT_NAME%/channels/MsTeamsChannel?api-version=2022-09-15" --body "{\"location\":\"global\",\"properties\":{\"channelName\":\"MsTeamsChannel\",\"properties\":{\"isEnabled\":true}}}" -o none 2>nul
+echo   Teams channel ready.
 
 REM Build Teams app package
 echo   Building Teams app package...
@@ -186,8 +192,10 @@ if not exist "teams\package\outline.png" (
     echo   WARNING: teams\package\outline.png missing - add a 32x32 PNG icon
 )
 
-REM Create ZIP
-powershell -Command "Compress-Archive -Path 'teams\package\manifest.json','teams\package\color.png','teams\package\outline.png' -DestinationPath 'teams\openclaw-teams-app.zip' -Force" 2>nul
+REM Create ZIP (use pwsh for reliable Compress-Archive support)
+pushd "%~dp0"
+pwsh -NoProfile -Command "Compress-Archive -LiteralPath 'teams/package/manifest.json','teams/package/color.png','teams/package/outline.png' -DestinationPath 'teams/openclaw-teams-app.zip' -Force" 2>nul
+popd
 echo   Package: teams\openclaw-teams-app.zip
 echo.
 echo   Install in Teams:
