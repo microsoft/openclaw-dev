@@ -38,7 +38,7 @@ cd openclaw
 .\msftclaw.cmd up
 ```
 
-First run takes ~6 minutes. Subsequent deploys take ~30 seconds.
+On first run, you'll be prompted to pick an Azure **region** and **resource group** (select "Create a new resource group"). First deploy takes ~8 minutes. Subsequent deploys take ~30 seconds.
 
 ### Verify
 
