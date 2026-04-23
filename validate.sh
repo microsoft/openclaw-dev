@@ -2,13 +2,13 @@
 # validate.sh — Test that OpenClaw on ACA can reach Azure OpenAI via managed identity.
 # Run from a machine connected to the VNet (e.g. az containerapp exec, VPN, or Bastion).
 #
-# Usage: ./validate.sh <CONTAINER_APP_FQDN>
+# Usage: ./validate.sh <HOST_FQDN>
 #
 # Example: ./validate.sh openclaw-abc123.internal.eastus.azurecontainerapps.io
 
 set -euo pipefail
 
-FQDN="${1:?Usage: ./validate.sh <CONTAINER_APP_FQDN>}"
+FQDN="${1:?Usage: ./validate.sh <HOST_FQDN>}"
 BASE="https://${FQDN}"
 
 echo "============================================"

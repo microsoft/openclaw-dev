@@ -1,5 +1,5 @@
 # postprovision.ps1 — Updates the Easy Auth app registration redirect URI
-# with the actual Container App FQDN (only known after Bicep provisioning).
+# with the actual host FQDN (only known after Bicep provisioning).
 $ErrorActionPreference = "Stop"
 
 $authAppId = (azd env get-value EASYAUTH_APP_ID 2>$null) -replace '\s+ERROR:.*','' | Where-Object { $_ -match '^[0-9a-f-]+$' }
@@ -8,9 +8,9 @@ if (-not $authAppId) {
     exit 0
 }
 
-$fqdn = (azd env get-value CONTAINER_APP_FQDN 2>$null) -replace '\s+ERROR:.*','' | Where-Object { $_ -match '\.' }
+$fqdn = (azd env get-value HOST_FQDN 2>$null) -replace '\s+ERROR:.*','' | Where-Object { $_ -match '\.' }
 if (-not $fqdn) {
-    Write-Host "[postprovision] No CONTAINER_APP_FQDN — skipping redirect URI update"
+    Write-Host "[postprovision] No HOST_FQDN — skipping redirect URI update"
     exit 0
 }
 

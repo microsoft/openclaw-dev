@@ -1,6 +1,6 @@
 #!/bin/bash
 # postprovision.sh — Updates the Easy Auth app registration redirect URI
-# with the actual Container App FQDN (only known after Bicep provisioning).
+# with the actual host FQDN (only known after Bicep provisioning).
 set -euo pipefail
 
 AUTH_APP_ID=$(azd env get-value EASYAUTH_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
@@ -9,9 +9,9 @@ if [ -z "$AUTH_APP_ID" ]; then
     exit 0
 fi
 
-FQDN=$(azd env get-value CONTAINER_APP_FQDN 2>/dev/null | grep -oP '^[a-z0-9.-]+$' || echo "")
+FQDN=$(azd env get-value HOST_FQDN 2>/dev/null | grep -oP '^[a-z0-9.-]+$' || echo "")
 if [ -z "$FQDN" ]; then
-    echo "[postprovision] No CONTAINER_APP_FQDN — skipping redirect URI update"
+    echo "[postprovision] No HOST_FQDN — skipping redirect URI update"
     exit 0
 fi
 

@@ -1,8 +1,8 @@
-# 🦞 OpenClaw on Azure
+# 🦞 openclaw-openai
 
-> **Alpha** — Experimental reference for hosting [OpenClaw](https://github.com/openclaw/openclaw) on Azure. No production-readiness guarantees. Review all configurations before deploying with sensitive data.
+> **Alpha** — Experimental template for a secure, hosted [OpenClaw](https://github.com/openclaw/openclaw) powered by OpenAI-compatible models. No production-readiness guarantees. Review all configurations before deploying with sensitive data.
 
-Run [OpenClaw](https://github.com/openclaw/openclaw) — the open-source AI assistant — in an isolated Azure container. No laptop install. No API keys. Nuke-and-pave in one command.
+A secure, hosted [OpenClaw](https://github.com/openclaw/openclaw) deployment wired to **any OpenAI-compatible Foundry Model** including Azure OpenAI models. For developers who want to try openclaw in the cloud without running it on their laptop. No local install. No API keys. Nuke-and-pave in one command.
 
 ## Why cloud instead of your laptop?
 
@@ -28,8 +28,8 @@ OpenClaw runs arbitrary code and can be deceived by prompt injection. **Don't ru
 ### Deploy
 
 ```bash
-git clone https://github.com/microsoft/openclaw
-cd openclaw
+git clone https://github.com/microsoft/openclaw-on-azure
+cd openclaw-on-azure
 
 # macOS/Linux/WSL
 ./msftclaw up
@@ -80,9 +80,9 @@ Your own **always-on AI assistant** — accessible from Teams on your phone, the
 
 | Resource | Purpose |
 |---|---|
-| **Azure Container Apps** | Hosts OpenClaw gateway — public HTTPS, ephemeral container |
-| **Azure OpenAI (GPT-5-mini)** | LLM backend via `/openai/v1/` — keyless (`disableLocalAuth: true`) |
-| **Managed Identity** | Container → OpenAI auth via short-lived Entra ID tokens |
+| **Azure Container Apps** | Hosts OpenClaw gateway — public HTTPS, ephemeral container (host layer is swappable) |
+| **Azure OpenAI / Foundry Models** | LLM backend via the OpenAI-compatible `/openai/v1/` API — keyless (`disableLocalAuth: true`). Default: `gpt-5-mini`; any Microsoft Foundry model exposing the OpenAI API works |
+| **Managed Identity** | Container → model auth via short-lived Entra ID tokens |
 | **Entra ID Easy Auth** | Microsoft login required before reaching the gateway |
 | **Azure Files** | Persists credentials, workspace, sessions across restarts |
 | **Container Registry** | Stores the container image |
@@ -92,10 +92,10 @@ Your own **always-on AI assistant** — accessible from Teams on your phone, the
 graph LR
     User["👤 User<br/>Browser / Mobile"]
     EasyAuth["🔐 Entra ID Easy Auth<br/>Microsoft login gate"]
-    subgraph ACA["Azure Container Apps"]
+    subgraph Host["Host (Azure Container Apps today)"]
         GW["🦞 OpenClaw Gateway<br/>:18789 · token auth"]
     end
-    AOAI["Azure OpenAI<br/>GPT-5-mini<br/>disableLocalAuth: true"]
+    AOAI["OpenAI-compatible model<br/>Microsoft Foundry Models / Azure OpenAI<br/>disableLocalAuth: true"]
     MI["Managed Identity<br/>Entra ID token"]
     AF["Azure Files<br/>credentials / workspace / sessions"]
 
@@ -116,7 +116,7 @@ This template applies **four independent layers** of security. An attacker must 
 |---|---|
 | **1. Entra ID Easy Auth** | Microsoft login required before any request reaches the container. Deployed automatically by `msftclaw up`. Unauthenticated requests get a 401. Scoped to your tenant. |
 | **2. Gateway token** | A random per-container token is injected into the SPA at startup. Even an authenticated user cannot call the WebSocket API without it. |
-| **3. Managed Identity (no API keys)** | The container authenticates to Azure OpenAI via short-lived Entra ID tokens. `disableLocalAuth: true` means API keys don't even exist. |
+| **3. Managed Identity (no API keys)** | The container authenticates to the model endpoint via short-lived Entra ID tokens. `disableLocalAuth: true` means API keys don't even exist. |
 | **4. Ephemeral container** | State is on Azure Files; the container itself is disposable. `msftclaw down && msftclaw up` = clean slate in 6 minutes. |
 
 ### What to be aware of
@@ -124,7 +124,7 @@ This template applies **four independent layers** of security. An attacker must 
 - **Skills run arbitrary code** — a malicious skill can access the managed identity. Only install trusted skills
 - **Prompt injection** — OpenClaw is susceptible. Nuke and repave if behavior changes
 - **Container runs as root** — add a non-root user for hardened deployments
-- **Conversations flow through Azure OpenAI** — don't paste highly sensitive data
+- **Conversations flow through the model endpoint** — don't paste highly sensitive data
 
 ### Adding Entra ID Easy Auth
 
@@ -137,7 +137,7 @@ To restrict access to specific users or groups, update the app registration in t
 
 ### Usage guidelines
 
-1. **Don't paste confidential data** — conversations flow through Azure OpenAI
+1. **Don't paste confidential data** — conversations flow through the configured model endpoint
 2. **Don't install credential-heavy skills** — no email, bank, or internal API skills
 3. **Nuke and pave regularly** — `msftclaw down && msftclaw up` if anything seems off
 4. **Monitor logs** — `msftclaw logs`
@@ -198,7 +198,9 @@ This automatically:
 | `az containerapp logs` hangs | SSL issue | Use Azure Portal Log stream |
 | `azd up` warns about permissions | azd heuristic | Safe to proceed. Or add `User Access Administrator` role |
 
-### Testing Azure OpenAI directly
+### Testing the model endpoint directly
+
+The deployed model is reachable via the OpenAI-compatible `/openai/v1/` API:
 
 ```bash
 TOKEN=$(az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv)

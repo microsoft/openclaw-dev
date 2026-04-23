@@ -270,8 +270,10 @@ resource cognitiveServicesUserRole 'Microsoft.Authorization/roleAssignments@2022
 // ---------------------------------------------------------------------------
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = acr.properties.loginServer
 output AZURE_CONTAINER_REGISTRY_NAME string = acr.name
-output CONTAINER_APP_FQDN string = containerApp.properties.configuration.ingress.fqdn
-output CONTAINER_APP_NAME string = containerApp.name
+// Host outputs — named generically so the underlying compute can change
+// (e.g. AKS, App Service) without updating callers or azd env consumers.
+output HOST_FQDN string = containerApp.properties.configuration.ingress.fqdn
+output HOST_NAME string = containerApp.name
 
 // ---------------------------------------------------------------------------
 // Azure Bot Service (optional — only deployed if botAppId is provided)

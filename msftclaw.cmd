@@ -161,7 +161,7 @@ echo.
 echo   Enabling Teams channel on Azure Bot...
 
 REM Get bot name and FQDN from the deployment
-for /f "tokens=*" %%i in ('azd env get-value CONTAINER_APP_FQDN 2^>nul') do set "FQDN=%%i"
+for /f "tokens=*" %%i in ('azd env get-value HOST_FQDN 2^>nul') do set "FQDN=%%i"
 for /f "tokens=*" %%i in ('azd env get-value BOT_APP_ID 2^>nul') do set "BOT_ID=%%i"
 for /f "tokens=*" %%i in ('azd env get-value AZURE_RESOURCE_GROUP 2^>nul') do set "RG=%%i"
 
