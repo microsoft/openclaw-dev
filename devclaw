@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# msftclaw — Run OpenClaw in the Microsoft Cloud
-# Usage: msftclaw up        Deploy to Azure
-#        msftclaw down      Tear down all Azure resources
-#        msftclaw start     Start the agent
-#        msftclaw stop      Stop the agent (preserves state)
-#        msftclaw restart   Restart the agent
-#        msftclaw status    Check agent status
-#        msftclaw logs      Stream live logs
-#        msftclaw test      Run a quick test message
-#        msftclaw login     Switch Azure account
+# devclaw — Run OpenClaw in the Microsoft Cloud
+# Usage: devclaw up        Deploy to Azure
+#        devclaw down      Tear down all Azure resources
+#        devclaw start     Start the agent
+#        devclaw stop      Stop the agent (preserves state)
+#        devclaw restart   Restart the agent
+#        devclaw status    Check agent status
+#        devclaw logs      Stream live logs
+#        devclaw test      Run a quick test message
+#        devclaw login     Switch Azure account
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -45,7 +45,7 @@ check_prereqs() {
 get_app() {
     RG=$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null || true)
     if [ -z "$RG" ]; then
-        echo -e "  ${R}No deployment found. Run 'msftclaw up' first.${N}"
+        echo -e "  ${R}No deployment found. Run 'devclaw up' first.${N}"
         exit 1
     fi
     APP=$(az containerapp list --resource-group "$RG" --query "[0].name" -o tsv 2>/dev/null || true)
@@ -71,7 +71,7 @@ login)
     az login ${ACCOUNT:+--login-hint "$ACCOUNT"} 2>/dev/null || az login
     azd auth login 2>/dev/null || true
     echo ""
-    echo -e "  ${G}Logged in. Run 'msftclaw up' to deploy.${N}"
+    echo -e "  ${G}Logged in. Run 'devclaw up' to deploy.${N}"
     echo ""
     ;;
 
@@ -83,8 +83,8 @@ up)
     azd up
     echo ""
     echo -e "  ${G}OpenClaw deployed!${N}"
-    echo -e "  ${D}Run 'msftclaw test' to verify it's working.${N}"
-    echo -e "  ${D}Run 'msftclaw logs' to see live output.${N}"
+    echo -e "  ${D}Run 'devclaw test' to verify it's working.${N}"
+    echo -e "  ${D}Run 'devclaw logs' to see live output.${N}"
     echo ""
     ;;
 
@@ -95,7 +95,7 @@ start)
     az containerapp update --name "$APP" --resource-group "$RG" \
         --min-replicas 1 --max-replicas 1 --only-show-errors >/dev/null
     echo -e "  ${G}OpenClaw started. State restored from Azure Files.${N}"
-    echo -e "  ${D}Run 'msftclaw logs' to see output.${N}"
+    echo -e "  ${D}Run 'devclaw logs' to see output.${N}"
     echo ""
     ;;
 
@@ -107,7 +107,7 @@ stop)
     az containerapp update --name "$APP" --resource-group "$RG" \
         --min-replicas 0 --max-replicas 0 --only-show-errors >/dev/null
     echo -e "  ${G}OpenClaw stopped. No compute running.${N}"
-    echo -e "  ${D}Run 'msftclaw start' to resume.${N}"
+    echo -e "  ${D}Run 'devclaw start' to resume.${N}"
     echo ""
     ;;
 
@@ -122,7 +122,7 @@ restart)
             --revision "$REVISION" --only-show-errors >/dev/null
         echo -e "  ${G}OpenClaw restarted.${N}"
     else
-        echo -e "  ${R}No active revision found. Run 'msftclaw start' instead.${N}"
+        echo -e "  ${R}No active revision found. Run 'devclaw start' instead.${N}"
     fi
     echo ""
     ;;
@@ -155,7 +155,7 @@ test)
         exit 0
     else
         echo -e "  ${R}❌ Container state: ${STATUS:-unknown}${N}"
-        echo -e "  ${D}Run 'msftclaw logs' to check for errors.${N}"
+        echo -e "  ${D}Run 'devclaw logs' to check for errors.${N}"
         echo ""
         exit 1
     fi
@@ -189,7 +189,7 @@ test)
 status)
     get_app
     echo ""
-    echo -e "  ${C}msftclaw${N}"
+    echo -e "  ${C}devclaw${N}"
     echo -e "  ${C}--------${N}"
 
     FQDN=$(az containerapp show --name "$APP" --resource-group "$RG" \
@@ -228,7 +228,7 @@ down)
     [ -n "$AUTH_ID" ] && echo -e "  ${D}Deleting Easy Auth app registration: $AUTH_ID${N}" && az ad app delete --id "$AUTH_ID" 2>/dev/null
     azd down --force --purge 2>/dev/null || azd down --force 2>/dev/null || true
     echo ""
-    echo -e "  ${G}All resources deleted. Run 'msftclaw up' to deploy fresh.${N}"
+    echo -e "  ${G}All resources deleted. Run 'devclaw up' to deploy fresh.${N}"
     echo ""
     ;;
 
@@ -238,7 +238,7 @@ deploy)
     echo ""
     azd deploy
     echo ""
-    echo -e "  ${G}Deployed! Run 'msftclaw test' to verify.${N}"
+    echo -e "  ${G}Deployed! Run 'devclaw test' to verify.${N}"
     echo ""
     ;;
 
@@ -259,7 +259,7 @@ teams)
         --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null)
 
     if [ -z "$BOT_NAME" ]; then
-        echo -e "  ${R}No Azure Bot found. Run 'msftclaw up' first.${N}"
+        echo -e "  ${R}No Azure Bot found. Run 'devclaw up' first.${N}"
         exit 1
     fi
 
@@ -313,28 +313,28 @@ teams)
 
 *)
     echo ""
-    echo -e "  ${C}msftclaw — OpenClaw in the Microsoft Cloud${N}"
+    echo -e "  ${C}devclaw — OpenClaw in the Microsoft Cloud${N}"
     echo ""
     echo "  Getting started:"
-    echo "    msftclaw up         Deploy OpenClaw to Azure"
-    echo "    msftclaw test       Verify it's working"
+    echo "    devclaw up         Deploy OpenClaw to Azure"
+    echo "    devclaw test       Verify it's working"
     echo ""
     echo "  Channels:"
-    echo "    msftclaw teams      Set up Microsoft Teams integration"
+    echo "    devclaw teams      Set up Microsoft Teams integration"
     echo ""
     echo "  Control:"
-    echo "    msftclaw start      Start the agent"
-    echo "    msftclaw stop       Stop the agent (state preserved)"
-    echo "    msftclaw restart    Restart the agent"
-    echo "    msftclaw status     Check agent status"
-    echo "    msftclaw logs       Stream live logs"
-    echo "    msftclaw deploy     Rebuild and deploy after code changes"
+    echo "    devclaw start      Start the agent"
+    echo "    devclaw stop       Stop the agent (state preserved)"
+    echo "    devclaw restart    Restart the agent"
+    echo "    devclaw status     Check agent status"
+    echo "    devclaw logs       Stream live logs"
+    echo "    devclaw deploy     Rebuild and deploy after code changes"
     echo ""
     echo "  Cleanup:"
-    echo "    msftclaw down       Delete all Azure resources"
+    echo "    devclaw down       Delete all Azure resources"
     echo ""
     echo "  Account:"
-    echo "    msftclaw login      Switch Azure account"
+    echo "    devclaw login      Switch Azure account"
     echo ""
     ;;
 esac

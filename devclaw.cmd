@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-REM msftclaw.cmd - OpenClaw in the Microsoft Cloud (Windows)
+REM devclaw.cmd - OpenClaw in the Microsoft Cloud (Windows)
 REM Wraps the bash script for cmd/PowerShell use
 set "AZURE_CONFIG_DIR=%~dp0.azure"
 set "COMMAND=%1"
@@ -37,7 +37,7 @@ echo.
 echo   Logging into Azure...
 call az login
 call azd auth login 2>nul
-echo   Logged in. Run 'msftclaw up' to deploy.
+echo   Logged in. Run 'devclaw up' to deploy.
 echo.
 exit /b 0
 
@@ -46,7 +46,7 @@ echo.
 echo   Deploying OpenClaw to Azure...
 call azd up
 echo.
-echo   OpenClaw deployed! Run 'msftclaw test' to verify.
+echo   OpenClaw deployed! Run 'devclaw test' to verify.
 echo.
 exit /b 0
 
@@ -109,7 +109,7 @@ for /f "tokens=*" %%a in ('az containerapp list --resource-group %RG% --query "[
 for /f "tokens=*" %%a in ('az containerapp revision list --name %APP% --resource-group %RG% --query "[?properties.active].properties.runningState" -o tsv 2^>nul') do set "STATUS=%%a"
 for /f "tokens=*" %%a in ('az containerapp show --name %APP% --resource-group %RG% --query "properties.configuration.ingress.fqdn" -o tsv 2^>nul') do set "FQDN=%%a"
 echo.
-echo   msftclaw
+echo   devclaw
 echo   --------
 echo   App:     %APP%
 echo   Status:  %STATUS%
@@ -137,7 +137,7 @@ if "%STATUS%"=="Running" (
 ) else if "%STATUS%"=="RunningAtMaxScale" (
     echo   Container: Running
 ) else (
-    echo   Container: %STATUS% - wait or check 'msftclaw logs'
+    echo   Container: %STATUS% - wait or check 'devclaw logs'
 )
 echo.
 echo   To test, open Azure Portal ^> Container App ^> Console ^> /bin/bash
@@ -149,7 +149,7 @@ exit /b 0
 echo.
 echo   Rebuilding and deploying OpenClaw...
 call azd deploy
-echo   Deployed! Run 'msftclaw test' to verify.
+echo   Deployed! Run 'devclaw test' to verify.
 echo.
 exit /b 0
 
@@ -175,7 +175,7 @@ REM Find the bot resource name in the resource group
 for /f "tokens=*" %%i in ('az resource list --resource-group %RG% --resource-type "Microsoft.BotService/botServices" --query "[0].name" -o tsv 2^>nul') do set "BOT_NAME=%%i"
 
 if "%BOT_NAME%"=="" (
-    echo   No Azure Bot found. Run 'msftclaw up' first.
+    echo   No Azure Bot found. Run 'devclaw up' first.
     exit /b 1
 )
 
@@ -216,27 +216,27 @@ exit /b 0
 
 :help
 echo.
-echo   msftclaw - OpenClaw in the Microsoft Cloud
+echo   devclaw - OpenClaw in the Microsoft Cloud
 echo.
 echo   Getting started:
-echo     msftclaw up         Deploy OpenClaw to Azure
-echo     msftclaw test       Verify it's working
+echo     devclaw up         Deploy OpenClaw to Azure
+echo     devclaw test       Verify it's working
 echo.
 echo   Channels:
-echo     msftclaw teams      Set up Microsoft Teams integration
+echo     devclaw teams      Set up Microsoft Teams integration
 echo.
 echo   Control:
-echo     msftclaw start      Start the agent
-echo     msftclaw stop       Stop the agent (state preserved)
-echo     msftclaw restart    Restart the agent
-echo     msftclaw status     Check agent status
-echo     msftclaw logs       Stream live logs
-echo     msftclaw deploy     Rebuild and deploy after code changes
+echo     devclaw start      Start the agent
+echo     devclaw stop       Stop the agent (state preserved)
+echo     devclaw restart    Restart the agent
+echo     devclaw status     Check agent status
+echo     devclaw logs       Stream live logs
+echo     devclaw deploy     Rebuild and deploy after code changes
 echo.
 echo   Cleanup:
-echo     msftclaw down       Delete all Azure resources
+echo     devclaw down       Delete all Azure resources
 echo.
 echo   Account:
-echo     msftclaw login      Switch Azure account
+echo     devclaw login      Switch Azure account
 echo.
 exit /b 0
