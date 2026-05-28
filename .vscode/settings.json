@@ -1,0 +1,23 @@
+{
+  // Scope Azure CLI + azd auth state to this workspace only.
+  // These env vars are injected into integrated terminals opened by THIS
+  // VS Code window. Other windows (and external shells) keep their own login.
+  //
+  // - AZURE_CONFIG_DIR  : az CLI config + login state (default: ~/.azure)
+  // - AZD_CONFIG_DIR    : azd global config + auth state (default: ~/.azd)
+  //
+  // az CLI state lives in `.azure-cli/`. azd project state stays in `.azure/`
+  // (the conventional dir azd looks for, scoped to this project only).
+  "terminal.integrated.env.windows": {
+    "AZURE_CONFIG_DIR": "${workspaceFolder}\\.azure-cli",
+    "AZD_CONFIG_DIR": "${workspaceFolder}\\.azd-config"
+  },
+  "terminal.integrated.env.linux": {
+    "AZURE_CONFIG_DIR": "${workspaceFolder}/.azure-cli",
+    "AZD_CONFIG_DIR": "${workspaceFolder}/.azd-config"
+  },
+  "terminal.integrated.env.osx": {
+    "AZURE_CONFIG_DIR": "${workspaceFolder}/.azure-cli",
+    "AZD_CONFIG_DIR": "${workspaceFolder}/.azd-config"
+  }
+}

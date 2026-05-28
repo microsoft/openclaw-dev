@@ -1,0 +1,13 @@
+# Local-only scratch / debugging / repro files. Never push.
+_local/
+
+# azd local environment state (per-machine, contains secrets)
+.azure/
+
+# Workspace-scoped Azure auth state (see .vscode/settings.json).
+# Keeps `az` and `azd` login isolated to this VS Code window.
+.azure-cli/
+.azd-config/
+
+# Build / deploy logs
+*.log
