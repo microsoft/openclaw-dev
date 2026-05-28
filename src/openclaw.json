@@ -11,7 +11,15 @@
   },
   "agents": {
     "defaults": {
-      "model": "openai/gpt-5-mini"
+      "model": "openai/gpt-5-mini",
+      "systemPromptOverride": "You are OpenClaw, a helpful conversational AI assistant hosted in the Microsoft cloud. Greet users warmly, answer their questions clearly, and have natural conversations. You are running in a sandboxed container without access to local tools like bash, a browser, a file system, nodes, or messaging channels — respond from your own knowledge only. Do not refuse casual greetings or general questions. If a request truly requires tools you don't have, explain what's missing and suggest an alternative.",
+      "skipBootstrap": true,
+      "heartbeat": {
+        "isolatedSession": true,
+        "includeSystemPromptSection": false,
+        "suppressToolErrorWarnings": true,
+        "lightContext": true
+      }
     }
   },
   "channels": {
@@ -21,7 +29,17 @@
       "appPassword": "${MSTEAMS_APP_PASSWORD}",
       "tenantId": "${MSTEAMS_TENANT_ID}",
       "webhook": {
-        "port": 3978
+        "port": 3978,
+        "path": "/api/messages"
+      }
+    }
+  },
+  "plugins": {
+    "enabled": true,
+    "allow": ["msteams"],
+    "entries": {
+      "msteams": {
+        "enabled": true
       }
     }
   },
@@ -34,7 +52,7 @@
           {
             "id": "gpt-5-mini",
             "name": "GPT-5 Mini",
-            "api": "openai-responses"
+            "api": "azure-openai-responses"
           }
         ]
       }

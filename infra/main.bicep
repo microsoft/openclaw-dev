@@ -11,6 +11,7 @@ param environmentName string
 @description('Primary location for all resources')
 @allowed([
   'australiaeast'
+  'eastasia'
   'eastus'
   'eastus2'
   'japaneast'
@@ -19,6 +20,7 @@ param environmentName string
   'swedencentral'
   'switzerlandnorth'
   'uksouth'
+  'westcentralus'
 ])
 @metadata({
   azd: {
@@ -43,6 +45,19 @@ param botTenantId string = subscription().tenantId
 @description('Easy Auth App Registration ID (created by preprovision hook)')
 param easyAuthAppId string = ''
 
+@description('Container image to deploy. azd populates from SERVICE_OPENCLAW_IMAGE_NAME after first deploy; empty on first provision (placeholder used).')
+param containerImage string = ''
+
+@description('Opt into ACA Express mode (preview). Set USE_EXPRESS_ENV=true in your azd env. Only enable in regions that support Express — e.g. East Asia, West Central US.')
+param useExpressEnv string = 'false'
+
+var expressEnabled = toLower(useExpressEnv) == 'true'
+
+@description('Region for the Azure OpenAI account. Defaults to `location`. Override (via AZURE_OPENAI_LOCATION) when the chosen `location` does not offer the target model SKU (e.g. ACA in `eastasia` with OpenAI in `eastus2`).')
+param openaiLocation string = ''
+
+var effectiveOpenaiLocation = empty(openaiLocation) ? location : openaiLocation
+
 // ---------------------------------------------------------------------------
 // 1. AI model — deployed to Azure OpenAI / Microsoft Foundry Models (OpenAI-compatible API)
 //    Model name/version are parameterized so any Foundry model exposing the
@@ -51,7 +66,7 @@ param easyAuthAppId string = ''
 module openai 'resources.bicep' = {
   name: 'openai'
   params: {
-    location: location
+    location: effectiveOpenaiLocation
     resourceToken: resourceToken
     environmentName: environmentName
     deployAiModel: true
@@ -79,6 +94,8 @@ module host 'aca.bicep' = {
     botAppSecret: botAppSecret
     botTenantId: botTenantId
     easyAuthAppId: easyAuthAppId
+    containerImage: containerImage
+    useExpressEnv: expressEnabled
   }
 }
 

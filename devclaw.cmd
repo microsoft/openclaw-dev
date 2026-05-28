@@ -59,15 +59,16 @@ if /i not "%CONFIRM%"=="y" (
     exit /b 0
 )
 REM Clean up Entra app registrations before destroying Azure resources
-for /f "tokens=*" %%i in ('azd env get-value BOT_APP_ID 2^>nul') do (
+REM NOTE: 'az' is az.cmd on Windows - must use CALL or outer batch exits
+for /f "tokens=*" %%i in ('call azd env get-value BOT_APP_ID 2^>nul') do (
     echo   Deleting bot app registration: %%i
-    az ad app delete --id %%i 2>nul
+    call az ad app delete --id %%i 2>nul
 )
-for /f "tokens=*" %%i in ('azd env get-value EASYAUTH_APP_ID 2^>nul') do (
+for /f "tokens=*" %%i in ('call azd env get-value EASYAUTH_APP_ID 2^>nul') do (
     echo   Deleting Easy Auth app registration: %%i
-    az ad app delete --id %%i 2>nul
+    call az ad app delete --id %%i 2>nul
 )
-call azd down --force --purge 2>nul
+call azd down --force --purge
 echo   All resources deleted.
 echo.
 exit /b 0

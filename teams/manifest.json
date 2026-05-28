@@ -6,9 +6,9 @@
   "name": { "short": "OpenClaw", "full": "OpenClaw AI Assistant" },
   "developer": {
     "name": "Microsoft",
-    "websiteUrl": "https://github.com/microsoft/openclaw",
-    "privacyUrl": "https://github.com/microsoft/openclaw",
-    "termsOfUseUrl": "https://github.com/microsoft/openclaw"
+    "websiteUrl": "https://github.com/microsoft/openclaw-dev",
+    "privacyUrl": "https://github.com/microsoft/openclaw-dev",
+    "termsOfUseUrl": "https://github.com/microsoft/openclaw-dev"
   },
   "description": {
     "short": "AI assistant powered by OpenClaw",

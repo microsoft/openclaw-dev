@@ -2,13 +2,13 @@
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.23/MicrosoftTeams.schema.json",
   "manifestVersion": "1.23",
   "version": "1.0.0",
-  "id": "23b512ef-0fd1-45bc-9fda-993f44846de7",
+  "id": "9c4350b9-91ff-429c-bb7f-1392f774ec09",
   "name": { "short": "OpenClaw", "full": "OpenClaw AI Assistant" },
   "developer": {
     "name": "Microsoft",
-    "websiteUrl": "https://github.com/microsoft/openclaw",
-    "privacyUrl": "https://github.com/microsoft/openclaw",
-    "termsOfUseUrl": "https://github.com/microsoft/openclaw"
+    "websiteUrl": "https://github.com/microsoft/openclaw-dev",
+    "privacyUrl": "https://github.com/microsoft/openclaw-dev",
+    "termsOfUseUrl": "https://github.com/microsoft/openclaw-dev"
   },
   "description": {
     "short": "AI assistant powered by OpenClaw",
@@ -18,7 +18,7 @@
   "accentColor": "#E94560",
   "bots": [
     {
-      "botId": "23b512ef-0fd1-45bc-9fda-993f44846de7",
+      "botId": "9c4350b9-91ff-429c-bb7f-1392f774ec09",
       "scopes": ["personal", "team", "groupChat"],
       "isNotificationOnly": false,
       "supportsCalling": false,
@@ -27,7 +27,7 @@
     }
   ],
   "webApplicationInfo": {
-    "id": "23b512ef-0fd1-45bc-9fda-993f44846de7"
+    "id": "9c4350b9-91ff-429c-bb7f-1392f774ec09"
   },
   "authorization": {
     "permissions": {
@@ -40,3 +40,4 @@
     }
   }
 }
+

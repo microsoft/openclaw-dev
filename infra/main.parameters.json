@@ -19,6 +19,15 @@
     },
     "easyAuthAppId": {
       "value": "${EASYAUTH_APP_ID}"
+    },
+    "containerImage": {
+      "value": "${SERVICE_OPENCLAW_IMAGE_NAME}"
+    },
+    "useExpressEnv": {
+      "value": "${USE_EXPRESS_ENV=false}"
+    },
+    "openaiLocation": {
+      "value": "${AZURE_OPENAI_LOCATION=}"
     }
   }
 }

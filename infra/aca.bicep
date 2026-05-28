@@ -1,4 +1,4 @@
-// Azure Container Apps infrastructure for OpenClaw (Express — no VNet)
+// Azure Container Apps infrastructure for OpenClaw
 // Provisions: ACR, Log Analytics, ACA Environment, Azure Files, Container App
 // Uses managed identity (keyless) for Azure OpenAI access
 // Scale-to-zero enabled — no compute charges when idle
@@ -6,6 +6,9 @@
 param location string
 param resourceToken string
 param environmentName string
+
+@description('Opt into ACA Express mode (preview). When true, the managed env is created with environmentMode=Express. Only enable in regions where Express is supported.')
+param useExpressEnv bool = false
 
 @description('Azure OpenAI endpoint (e.g. https://<name>.openai.azure.com/)')
 param openaiEndpoint string
@@ -28,6 +31,9 @@ param botTenantId string = ''
 
 @description('Easy Auth App Registration ID (for Entra ID login gate)')
 param easyAuthAppId string = ''
+
+@description('Container image to deploy. azd populates this from SERVICE_OPENCLAW_IMAGE_NAME after the first `azd deploy`; empty on first provision so a placeholder is used.')
+param containerImage string = ''
 
 // ---------------------------------------------------------------------------
 // Azure Container Registry
@@ -80,13 +86,18 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
 }
 
 // ---------------------------------------------------------------------------
-// Container Apps Environment (no VNet — fast provisioning, instant cold start)
+// Container Apps Environment
+// When useExpressEnv is true → Express mode (preview, fast cold start, no VNet).
+//   Express does NOT support appLogsConfiguration — logs flow through platform defaults.
+// Otherwise → standard Consumption-only env wired to the Log Analytics workspace above.
 // ---------------------------------------------------------------------------
-resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
+resource environment 'Microsoft.App/managedEnvironments@2026-03-02-preview' = {
   name: 'env-${resourceToken}'
   location: location
   tags: { 'azd-env-name': environmentName }
-  properties: {
+  properties: useExpressEnv ? {
+    environmentMode: 'Express'
+  } : {
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
@@ -98,7 +109,9 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
 }
 
 // Mount Azure Files into the ACA environment
-resource envStorage 'Microsoft.App/managedEnvironments/storages@2024-03-01' = {
+// Express mode does NOT support environment-level storage — skip when useExpressEnv is true.
+// (Trade-off: in Express mode the gateway token persists only for the lifetime of a replica.)
+resource envStorage 'Microsoft.App/managedEnvironments/storages@2024-03-01' = if (!useExpressEnv) {
   parent: environment
   name: 'openclawstate'
   properties: {
@@ -115,6 +128,14 @@ resource envStorage 'Microsoft.App/managedEnvironments/storages@2024-03-01' = {
 // Container App — OpenClaw gateway (keyless via managed identity)
 // Scale-to-zero: no compute charges when idle
 // ---------------------------------------------------------------------------
+
+// Preserve the image that `azd deploy` pushed on prior runs by reading it
+// from the `containerImage` parameter (sourced from SERVICE_OPENCLAW_IMAGE_NAME
+// in main.parameters.json). On first provision the param is empty, so we fall
+// back to a placeholder; subsequent provisions retain whatever azd last pushed.
+var placeholderImage = 'mcr.microsoft.com/k8se/quickstart:latest'
+var effectiveImage = empty(containerImage) ? placeholderImage : containerImage
+
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'openclaw-${resourceToken}'
   location: location
@@ -130,6 +151,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'acr-password'
           value: acr.listCredentials().passwords[0].value
+        }
+        {
+          name: 'msteams-app-password'
+          value: botAppSecret
         }
       ]
       registries: [
@@ -149,7 +174,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       containers: [
         {
           name: 'openclaw'
-          image: 'mcr.microsoft.com/k8se/quickstart:latest'
+          image: effectiveImage
           resources: {
             cpu: json('1.0')
             memory: '2Gi'
@@ -189,8 +214,20 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'AZURE_OPENAI_AUTH'
               value: 'managed-identity'
             }
+            {
+              name: 'MSTEAMS_APP_ID'
+              value: botAppId
+            }
+            {
+              name: 'MSTEAMS_APP_PASSWORD'
+              secretRef: 'msteams-app-password'
+            }
+            {
+              name: 'MSTEAMS_TENANT_ID'
+              value: botTenantId
+            }
           ]
-          volumeMounts: [
+          volumeMounts: useExpressEnv ? [] : [
             {
               volumeName: 'state-volume'
               mountPath: '/mnt/state'
@@ -198,7 +235,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           ]
         }
       ]
-      volumes: [
+      volumes: useExpressEnv ? [] : [
         {
           name: 'state-volume'
           storageName: envStorage.name
@@ -227,6 +264,11 @@ resource containerAppAuth 'Microsoft.App/containerApps/authConfigs@2024-03-01' =
     globalValidation: {
       unauthenticatedClientAction: 'RedirectToLoginPage'
       redirectToProvider: 'azureactivedirectory'
+      // Bot Framework Connector posts to /api/messages with its own JWT.
+      // Easy Auth must NOT intercept this path or Teams will silently fail.
+      excludedPaths: [
+        '/api/messages'
+      ]
     }
     identityProviders: {
       azureActiveDirectory: {
