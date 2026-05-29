@@ -8,7 +8,34 @@ Your own **always-on AI assistant**, running safely in the cloud and reachable f
 
 **Why this template:** OpenClaw is powerful but runs arbitrary code and can be fooled by prompt injection — so you should not run it on your work machine. This template puts it in an **isolated, ephemeral container** instead, signs in your users with their **Microsoft work account**, and talks to the model with a **Managed Identity** so there are **no API keys anywhere**. See [Safety](#security) for the full defense-in-depth story.
 
-→ Jump to: [Quick start](#quick-start) · [Safety](#security) · [Use it from Teams](#teams-setup) · [Architecture](#architecture)
+→ Jump to: [Ask Copilot](#need-help-ask-copilot) · [Quick start](#quick-start) · [Safety](#security) · [Use it from Teams](#teams-setup) · [Architecture](#architecture)
+
+## Need help? Ask Copilot
+
+This repo ships an **AI agent skill** so any assistant that reads
+[`.github/copilot-instructions.md`](.github/copilot-instructions.md) or
+[`AGENTS.md`](AGENTS.md) (GitHub Copilot Chat, Claude Code, Cursor, Codex, and
+friends) can set up and run everything for you in plain English — no need to
+memorize `azd` env vars or scroll the troubleshooting tables.
+
+**How to use it:** clone the repo, open it in VS Code with
+[GitHub Copilot Chat](https://docs.github.com/copilot) (or your preferred agent),
+and just ask. Try:
+
+- *"Deploy OpenClaw to `eastus2`."*
+- *"Connect it to Microsoft Teams so I can use it from my phone."*
+- *"Why is `devclaw up` failing?"*
+- *"Stop it to save money, then start it again tomorrow."*
+- *"Restrict access to just my team."*
+- *"Tear it all down cleanly."*
+
+The assistant follows the playbook in
+[`skills/openclaw-on-azure/SKILL.md`](skills/openclaw-on-azure/SKILL.md) and the
+always-on rules in [`.github/copilot-instructions.md`](.github/copilot-instructions.md)
+— using this repo's own scripts, env-var contract, region list, and error catalog
+instead of guessing. It always confirms with you before any destructive action
+(`devclaw down`, `az ad app delete`, RBAC removal). The skill follows the open
+[Agent Skills](https://agentskills.io/) format, so it works across many agents.
 
 ## Why cloud instead of your laptop?
 
