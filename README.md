@@ -1,3 +1,16 @@
+<!--
+---
+page_type: sample
+languages:
+- javascript
+products:
+- azure-openai
+- azure
+urlFragment: openclaw-dev
+name: openclaw-dev
+description: Deploy OpenClaw with Azure OpenAI using one CLI command. Talk to the OpenClaw agent from your mobile via Microsoft Teams 
+---
+-->
 # 🦞 openclaw-dev   
 
 **Short link:** <https://aka.ms/openclaw-dev>
