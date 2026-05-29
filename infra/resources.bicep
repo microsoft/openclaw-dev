@@ -1,7 +1,7 @@
 // Azure OpenAI / Microsoft Foundry Models resource — adapted from https://aka.ms/openai/start
 // Deploys a Cognitive Services (OpenAI) account with a single model deployment.
-// Model name/version are parameterized so any Foundry model that exposes the
-// OpenAI-compatible API can be used.
+// Model name/version are parameterized; today this targets Azure OpenAI models,
+// with scope to add Claude and other Foundry Models in the near future.
 
 @description('Primary location for all resources')
 param location string = resourceGroup().location
@@ -19,7 +19,7 @@ param sku string = 'S0'
 @description('Deploy the AI model automatically')
 param deployAiModel bool = true
 
-@description('AI model to deploy (any OpenAI-compatible Foundry model)')
+@description('AI model to deploy (Azure OpenAI in Foundry Models; default gpt-5-mini)')
 param aiModelName string = 'gpt-5-mini'
 
 @description('AI model version')

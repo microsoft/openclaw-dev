@@ -11,3 +11,8 @@ _local/
 
 # Build / deploy logs
 *.log
+
+# Generated Teams sideload artifacts (rebuilt by `devclaw teams`).
+# Source of truth is teams/manifest.json + teams/package/{color,outline}.png
+teams/package/manifest.json
+teams/openclaw-teams-app.zip
