@@ -4,9 +4,18 @@
 
 Your own **always-on AI assistant**, running safely in the cloud and reachable from **Microsoft Teams on your phone** — not on your laptop. Wired to **Azure OpenAI in Foundry Models** (with scope to add Claude and other Foundry Models in the near future). No local install. No API keys. One command to deploy, one to tear down.
 
-![openclaw architecture](docs/architecture.svg)
+## Why you should care
 
-**Why this template:** OpenClaw is powerful but runs arbitrary code and can be fooled by prompt injection — so you should not run it on your work machine. This template puts it in an **isolated, ephemeral container** instead, signs in your users with their **Microsoft work account**, and talks to the model with a **Managed Identity** so there are **no API keys anywhere**. See [Safety](#security) for the full defense-in-depth story.
+OpenClaw is powerful but runs arbitrary code and can be fooled by prompt injection. So this template is built so that, in plain English:
+
+- 🔒 **Only people you let in can chat with it** — gated by your Microsoft sign-in.
+- 🗝️ **No passwords or API keys anywhere** — the model is called with a managed identity.
+- 🧪 **Runs in a throwaway sandbox in the cloud** — not on your laptop, so the blast radius from a bad prompt is small.
+- ♻️ **Wipe and rebuild in ~6 minutes** — if anything ever feels off, `devclaw down && devclaw up` gives you a clean slate.
+
+See [Safety](#security) for the full defense-in-depth story, or skip straight to [Quick start](#quick-start).
+
+![openclaw architecture](docs/architecture.svg)
 
 → Jump to: [Ask Copilot](#need-help-ask-copilot) · [Quick start](#quick-start) · [Safety](#security) · [Use it from Teams](#teams-setup) · [Architecture](#architecture)
 
@@ -157,7 +166,7 @@ graph LR
     Proxy -->|"/api/messages"| MST
     Proxy -->|"all other paths"| GW
     MST -->|"channel events"| GW
-    GW -->|"OpenAI responses"| Auth
+    GW -->|"OpenAI REST API"| Auth
     Auth -->|"Bearer token"| AOAI
     GW -.->|"Volume mount"| AF
     MI -.->|"RBAC: Cognitive Services User"| AOAI
@@ -176,7 +185,7 @@ All dependencies are pinned at container build time (see [src/Dockerfile](src/Do
 | **`@azure/identity`** | `4.13.1` (plugin-bundled) / latest (auth-proxy) | Used by the auth-proxy and the msteams plugin for `DefaultAzureCredential` and `getBearerTokenProvider` — fetches/caches/refreshes Entra ID tokens for AOAI and Bot Framework | The 4.x line has been the active major since early 2024 |
 | **`http-proxy`** | latest (auth-proxy install) | Powers [src/gateway-proxy.mjs](src/gateway-proxy.mjs) — splits ingress by URL path | Long-lived, stable library |
 
-**How AOAI/Foundry is accessed**: OpenClaw speaks the **OpenAI-compatible REST API** — specifically the **Responses API** (`api: "azure-openai-responses"` in [src/openclaw.json](src/openclaw.json)) at `/openai/v1/responses` — directly. It does not depend on the official `openai` npm SDK or the older `@azure/openai` SDK. Requests flow `gateway → auth-proxy → AOAI/Foundry`; the auth-proxy attaches the MI bearer token at the wire level, so AOAI's `disableLocalAuth: true` works without API keys anywhere in the system. The auth-proxy is path-agnostic (it forwards `req.url` as-is), so the same proxy works for any OpenAI-compatible adapter — completions, responses, embeddings, audio, images. The Azure-specific `azure-openai-responses` adapter is used (rather than vanilla `openai-responses`) because AOAI's Responses surface persists reasoning items differently from OpenAI's; the Azure adapter handles the `store: true` / `previous_response_id` semantics correctly.
+**How AOAI/Foundry is accessed**: OpenClaw speaks the **OpenAI-compatible REST API** under `/openai/v1/...` directly (see [src/openclaw.json](src/openclaw.json) for the configured adapter). It does not depend on the official `openai` npm SDK or the older `@azure/openai` SDK. Requests flow `gateway → auth-proxy → AOAI/Foundry`; the auth-proxy attaches the MI bearer token at the wire level, so AOAI's `disableLocalAuth: true` works without API keys anywhere in the system. The auth-proxy is path-agnostic (it forwards `req.url` as-is), so the same proxy works for any OpenAI-compatible surface — chat, embeddings, audio, images.
 
 **How Teams is accessed**: Inbound activities come in over HTTPS from Bot Framework to `/api/messages`. The `@openclaw/msteams` plugin validates the JWT and uses `@microsoft/teams.api` + `@microsoft/teams.apps` for everything from there — activity dispatch, replies, streaming, adaptive cards.
 

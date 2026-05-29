@@ -19,24 +19,11 @@
   "bots": [
     {
       "botId": "APP_ID_PLACEHOLDER",
-      "scopes": ["personal", "team", "groupChat"],
+      "scopes": ["personal"],
       "isNotificationOnly": false,
       "supportsCalling": false,
       "supportsVideo": false,
-      "supportsFiles": true
+      "supportsFiles": false
     }
-  ],
-  "webApplicationInfo": {
-    "id": "APP_ID_PLACEHOLDER"
-  },
-  "authorization": {
-    "permissions": {
-      "resourceSpecific": [
-        { "name": "ChannelMessage.Read.Group", "type": "Application" },
-        { "name": "ChannelMessage.Send.Group", "type": "Application" },
-        { "name": "Member.Read.Group", "type": "Application" },
-        { "name": "ChatMessage.Read.Chat", "type": "Application" }
-      ]
-    }
-  }
+  ]
 }
