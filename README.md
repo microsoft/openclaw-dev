@@ -21,7 +21,7 @@ Short link: <https://aka.ms/openclaw-dev>
 
 > **⚠️ Alpha.** Dev/test template, not a product. No production guarantees. Features, infra, and config can change without notice. Conversations go through the model endpoint you configure, so treat them like any other cloud AI chat. Read [Safety](#security) before pasting anything sensitive.
 
-The idea: OpenClaw is a useful agent runtime, but it runs arbitrary code and gets fooled by prompt injection. Running it on your work laptop is a bad idea. This repo deploys it to a disposable cloud sandbox instead, gated by your Microsoft sign-in, with no API keys anywhere. One command up, one command down.
+The idea: OpenClaw is a useful agent runtime, but it runs arbitrary code. This repo deploys it to a disposable cloud sandbox, gated by your Microsoft sign-in, with no API keys anywhere. One command up, one command down.
 
 ![openclaw architecture](docs/architecture.svg)
 
