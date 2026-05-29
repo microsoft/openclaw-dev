@@ -63,6 +63,14 @@ RUN sed -i 's/\r$//' /opt/openclaw-auth/auth-proxy.mjs
 COPY gateway-proxy.mjs /opt/openclaw-auth/gateway-proxy.mjs
 RUN sed -i 's/\r$//' /opt/openclaw-auth/gateway-proxy.mjs
 
+# PERMANENT FIX: extend the @openclaw/msteams plugin's Bot Framework serviceUrl
+# allowlist to include directline.botframework.com so Direct Line / Web Chat
+# replies are not blocked by the plugin's SSRF guard. See
+# patch-msteams-allowlist.mjs for the full explanation.
+COPY patch-msteams-allowlist.mjs /opt/patch-msteams-allowlist.mjs
+RUN sed -i 's/\r$//' /opt/patch-msteams-allowlist.mjs && \
+    node /opt/patch-msteams-allowlist.mjs || echo "[Dockerfile] patch-msteams-allowlist failed but continuing"
+
 # Copy entrypoint (handles state restore/save with Azure Files)
 # Fix line endings to LF (git on Windows may convert to CRLF)
 COPY entrypoint.sh /opt/entrypoint.sh

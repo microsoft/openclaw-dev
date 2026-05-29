@@ -76,35 +76,102 @@
        Two stacked cards. Teams is the headline (big logo).
   -->
 
-  <!-- Teams (big) -->
+  <!-- Teams (compact — client list deliberately small so the safety panel is the
+       visual focus of the left column) -->
   <g transform="translate(40,150)">
-    <rect width="440" height="240" rx="18" fill="#FFFFFF" stroke="#C9DDF0" stroke-width="1.6" filter="url(#cardShadow)"/>
-    <use href="#i-teams" x="28" y="36" width="170" height="170"/>
-    <text x="220" y="92"  font-size="22" font-weight="700" fill="#0A2540">Microsoft Teams</text>
-    <text x="220" y="120" font-size="14" fill="#3D5A80">Web · Desktop · Mobile</text>
-    <text x="220" y="158" font-size="12" fill="#5A7184">Chat with the bot from anywhere</text>
-    <text x="220" y="178" font-size="12" fill="#5A7184">you already use Teams.</text>
-  </g>
-
-  <!-- WebChat -->
-  <g transform="translate(40,410)">
     <rect width="440" height="130" rx="18" fill="#FFFFFF" stroke="#C9DDF0" stroke-width="1.6" filter="url(#cardShadow)"/>
-    <use href="#i-browser" x="28" y="25" width="80" height="80"/>
-    <text x="130" y="62"  font-size="20" font-weight="700" fill="#0A2540">WebChat in a browser</text>
-    <text x="130" y="88"  font-size="13" fill="#3D5A80">Open the link, sign in once.</text>
-    <text x="130" y="108" font-size="12" fill="#5A7184">No install needed.</text>
+    <use href="#i-teams" x="22" y="22" width="86" height="86"/>
+    <text x="128" y="52"  font-size="20" font-weight="700" fill="#0A2540">Microsoft Teams</text>
+    <text x="128" y="76"  font-size="13" fill="#3D5A80">Web · Desktop · Mobile</text>
+    <text x="128" y="100" font-size="12" fill="#5A7184">Chat with the bot from anywhere.</text>
   </g>
 
-  <!-- devclaw CLI (small, developer hook) -->
-  <g transform="translate(40,560)">
+  <!-- WebChat (compact) -->
+  <g transform="translate(40,295)">
     <rect width="440" height="100" rx="18" fill="#FFFFFF" stroke="#C9DDF0" stroke-width="1.6" filter="url(#cardShadow)"/>
-    <g transform="translate(28,18)">
-      <rect width="64" height="64" rx="14" fill="#0A2540"/>
-      <text x="32" y="44" font-size="28" font-weight="700"
+    <use href="#i-browser" x="22" y="20" width="60" height="60"/>
+    <text x="98"  y="42" font-size="18" font-weight="700" fill="#0A2540">WebChat in a browser</text>
+    <text x="98"  y="64" font-size="12" fill="#3D5A80">Open the link, sign in once.</text>
+    <text x="98"  y="82" font-size="11" fill="#5A7184">No install needed.</text>
+  </g>
+
+  <!-- devclaw CLI (compact — just the developer hook) -->
+  <g transform="translate(40,410)">
+    <rect width="440" height="80" rx="18" fill="#FFFFFF" stroke="#C9DDF0" stroke-width="1.6" filter="url(#cardShadow)"/>
+    <g transform="translate(22,16)">
+      <rect width="48" height="48" rx="11" fill="#0A2540"/>
+      <text x="24" y="33" font-size="22" font-weight="700"
             font-family="ui-monospace,Consolas,Menlo,monospace" fill="#7BE495" text-anchor="middle">&gt;_</text>
     </g>
-    <text x="114" y="48" font-size="18" font-weight="700" fill="#0A2540">devclaw CLI</text>
-    <text x="114" y="72" font-size="13" fill="#3D5A80">Deploy from your laptop in one command.</text>
+    <text x="86" y="36" font-size="16" font-weight="700" fill="#0A2540">devclaw CLI</text>
+    <text x="86" y="58" font-size="12" fill="#3D5A80">Deploy from your laptop in one command.</text>
+  </g>
+
+  <!-- "Why this is safe" panel — ELI5, plain English, mirrors the README's
+       "Why you should care" block. Made deliberately PROMINENT (mint border +
+       top accent ribbon + soft outer glow) so a skimmer sees the safety story
+       before they scan the Azure side. Pastel mint to harmonise with the rest
+       of the diagram. No Azure jargon in the badge headlines; small subtitles
+       carry the technical term. -->
+  <g transform="translate(40,510)">
+    <!-- Soft outer glow to lift the card off the canvas -->
+    <rect x="-3" y="-3" width="446" height="326" rx="21" fill="#A7F3D0" opacity="0.45"/>
+    <!-- Card with soft mint border -->
+    <rect width="440" height="320" rx="18"
+          fill="#FFFFFF" stroke="#6EE7B7" stroke-width="3" filter="url(#cardShadow)"/>
+    <!-- Top accent ribbon (same mint) — catches the eye at a glance -->
+    <path d="M 18 0 H 422 A 18 18 0 0 1 440 18 V 12 H 0 V 18 A 18 18 0 0 1 18 0 Z" fill="#6EE7B7"/>
+
+    <!-- Title — larger, with subtle mint accent on the subtitle -->
+    <text x="22" y="42" font-size="19" font-weight="700" fill="#0A2540">
+      Why this is safe<tspan font-size="13" font-weight="500" fill="#10B981">  — in plain English</tspan>
+    </text>
+
+    <!-- Row 1 (y=70) -->
+    <g transform="translate(22,70)">
+      <!-- Badge 1: Microsoft sign-in -->
+      <g>
+        <circle cx="18" cy="18" r="15" fill="#DBEAFE"/>
+        <rect x="12" y="17" width="12" height="11" rx="1.5" fill="#1D4ED8"/>
+        <path d="M14 17 V13 a4 4 0 0 1 8 0 V17" fill="none" stroke="#1D4ED8" stroke-width="1.8"/>
+        <text x="46" y="16" font-size="13" font-weight="700" fill="#0A2540">Only people you let in</text>
+        <text x="46" y="34" font-size="13" font-weight="700" fill="#0A2540">can chat with it</text>
+        <text x="46" y="54" font-size="10" fill="#5A7184">(Microsoft sign-in required)</text>
+      </g>
+      <!-- Badge 2: No keys -->
+      <g transform="translate(208,0)">
+        <circle cx="18" cy="18" r="15" fill="#EDE9FE"/>
+        <circle cx="15" cy="18" r="4" fill="none" stroke="#7C3AED" stroke-width="2"/>
+        <path d="M19 18 L27 18 M24 18 V22 M27 18 V22" stroke="#7C3AED" stroke-width="2" stroke-linecap="round"/>
+        <text x="46" y="16" font-size="13" font-weight="700" fill="#0A2540">No passwords or</text>
+        <text x="46" y="34" font-size="13" font-weight="700" fill="#0A2540">API keys to steal</text>
+        <text x="46" y="54" font-size="10" fill="#5A7184">(Managed identity signs the calls)</text>
+      </g>
+    </g>
+
+    <!-- Row 2 (y=210 — generous gap so the subtitle above doesn't crowd the icon below) -->
+    <g transform="translate(22,210)">
+      <!-- Badge 3: Throwaway sandbox -->
+      <g>
+        <circle cx="18" cy="18" r="15" fill="#FEE2E2"/>
+        <rect x="10" y="11" width="16" height="14" rx="1.5" fill="none" stroke="#B91C1C" stroke-width="2"/>
+        <path d="M14 11 V25 M22 11 V25" stroke="#B91C1C" stroke-width="1.2"/>
+        <text x="46" y="16" font-size="13" font-weight="700" fill="#0A2540">Runs in a</text>
+        <text x="46" y="34" font-size="13" font-weight="700" fill="#0A2540">throwaway sandbox</text>
+        <text x="46" y="54" font-size="10" fill="#5A7184">(Not on your laptop — blast radius is small)</text>
+      </g>
+      <!-- Badge 4: Wipe and rebuild -->
+      <g transform="translate(208,0)">
+        <circle cx="18" cy="18" r="15" fill="#DCFCE7"/>
+        <path d="M12 18 A6 6 0 0 1 18 12 L22 12 M22 12 L20 14 M22 12 L20 10"
+              stroke="#0E7C66" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M24 18 A6 6 0 0 1 18 24 L14 24 M14 24 L16 22 M14 24 L16 26"
+              stroke="#0E7C66" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <text x="46" y="16" font-size="13" font-weight="700" fill="#0A2540">Wipe and rebuild</text>
+        <text x="46" y="34" font-size="13" font-weight="700" fill="#0A2540">in ~6 minutes</text>
+        <text x="46" y="54" font-size="10" fill="#5A7184">(devclaw down &amp;&amp; up = clean slate)</text>
+      </g>
+    </g>
   </g>
 
   <!-- ===================== RIGHT: AZURE FRAME =====================
@@ -153,7 +220,7 @@
       </g>
     </g>
 
-    <!-- Connector: Container Apps to Foundry (passwordless, Responses API) -->
+    <!-- Connector: Container Apps to Foundry (passwordless, OpenAI REST API) -->
     <g fill="none" stroke="#7C3AED" stroke-width="2.6">
       <path d="M 500 270 L 500 340" marker-end="url(#arrMI)"/>
     </g>
@@ -161,7 +228,7 @@
       <rect width="284" height="30" rx="15" fill="#FFFFFF" stroke="#7C3AED" stroke-width="1.2"/>
       <text x="142" y="14" font-size="11" font-weight="700" fill="#0A2540" text-anchor="middle"
             font-family="ui-monospace,Consolas,Menlo,monospace">
-        OpenAI Responses REST API
+        OpenAI REST API
       </text>
       <text x="142" y="26" font-size="10" font-weight="600" fill="#7C3AED" text-anchor="middle">
         Passwordless · Managed Identity bearer token
@@ -187,7 +254,7 @@
         <text x="18" y="21" font-size="12" font-weight="700"
               font-family="ui-monospace,Consolas,Menlo,monospace" fill="#7C3AED">REST</text>
         <text x="68" y="21" font-size="12" fill="#0A2540"
-              font-family="ui-monospace,Consolas,Menlo,monospace">POST /openai/v1/responses  —  OpenAI Responses API</text>
+              font-family="ui-monospace,Consolas,Menlo,monospace">/openai/v1/...  —  OpenAI REST API</text>
         <text x="880" y="21" font-size="11" fill="#7B8FA1" text-anchor="end">direct HTTP — no SDK in the way</text>
       </g>
 
@@ -225,16 +292,14 @@
   </g>
 
   <!-- ===================== CONNECTING ARROWS (clients → service) =====================
-       Two symmetric gentle S-curves from the left column into the openclaw service
-       card. Teams lands near the TOP, WebChat lands near the BOTTOM — distinct
-       entry points keep the two arrows visually separate without needing labels.
-       Anchors:
-         Teams card right edge:  x=480, y=270  →  service top    (590, 250)
-         WebChat right edge:     x=480, y=475  →  service bottom (590, 380)
+       Two gentle S-curves from the (now compact) left column into the openclaw
+       service card. Updated to match the new client card midlines:
+         Teams card right edge:  x=480, y=215  →  service top    (590, 250)
+         WebChat right edge:     x=480, y=345  →  service bottom (590, 380)
   -->
   <g fill="none" stroke="#3B82F6" stroke-width="2.4">
-    <path d="M 480 270 C 530 270, 540 250, 590 250" marker-end="url(#arrUser)"/>
-    <path d="M 480 475 C 530 475, 540 380, 590 380" marker-end="url(#arrUser)"/>
+    <path d="M 480 215 C 530 215, 540 250, 590 250" marker-end="url(#arrUser)"/>
+    <path d="M 480 345 C 530 345, 540 380, 590 380" marker-end="url(#arrUser)"/>
   </g>
 
   <!-- ===================== FOOTNOTE (one line, plain English) ===================== -->

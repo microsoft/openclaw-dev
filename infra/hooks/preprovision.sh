@@ -44,6 +44,12 @@ fi
 # Get tenant ID
 TENANT_ID=$(az account show --query tenantId -o tsv 2>/dev/null)
 
+# Create the service principal (enterprise application) for the bot app reg
+# in this tenant. Without this, the Bot Framework token endpoint rejects
+# the bot's appPassword with AADSTS7000229 ("missing service principal in
+# the tenant"), which silently swallows every reply at activity-send time.
+az ad sp create --id "$APP_ID" >/dev/null 2>&1 || true
+
 # Save to azd env so Bicep can use them
 azd env set BOT_APP_ID "$APP_ID"
 azd env set BOT_APP_SECRET "$SECRET"

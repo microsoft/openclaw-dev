@@ -6,9 +6,9 @@
   "name": { "short": "OpenClaw", "full": "OpenClaw AI Assistant" },
   "developer": {
     "name": "Microsoft",
-    "websiteUrl": "https://github.com/microsoft/openclaw-dev",
-    "privacyUrl": "https://github.com/microsoft/openclaw-dev",
-    "termsOfUseUrl": "https://github.com/microsoft/openclaw-dev"
+    "websiteUrl": "https://github.com/microsoft/openclaw-dev#alpha",
+    "privacyUrl": "https://www.microsoft.com/en-us/privacy/privacystatement",
+    "termsOfUseUrl": "https://www.microsoft.com/en-us/legal/terms-of-use"
   },
   "description": {
     "short": "AI assistant powered by OpenClaw",
@@ -19,24 +19,11 @@
   "bots": [
     {
       "botId": "APP_ID_PLACEHOLDER",
-      "scopes": ["personal", "team", "groupChat"],
+      "scopes": ["personal"],
       "isNotificationOnly": false,
       "supportsCalling": false,
       "supportsVideo": false,
-      "supportsFiles": true
+      "supportsFiles": false
     }
-  ],
-  "webApplicationInfo": {
-    "id": "APP_ID_PLACEHOLDER"
-  },
-  "authorization": {
-    "permissions": {
-      "resourceSpecific": [
-        { "name": "ChannelMessage.Read.Group", "type": "Application" },
-        { "name": "ChannelMessage.Send.Group", "type": "Application" },
-        { "name": "Member.Read.Group", "type": "Application" },
-        { "name": "ChatMessage.Read.Chat", "type": "Application" }
-      ]
-    }
-  }
+  ]
 }

@@ -163,6 +163,9 @@ Entra app registrations. Always confirm with the user before running it.
 | WebChat shows login screen / token not injected | `entrypoint.sh` didn't finish | Check `devclaw logs` |
 | `POST /api/messages` → **502** | msteams plugin didn't load (nothing on `:3978`) | Confirm the `plugins` block in `src/openclaw.json`, `devclaw deploy`, look for `… msteams …` in `[gateway] http server listening` log |
 | `POST /api/messages` → **401** to a curl test | Bot Framework JWT auth rejecting unsigned request | None — real Teams traffic carries a valid token |
+| Teams DM is acknowledged (200) but bot never replies | `channels.msteams.dmPolicy` defaults to `"pairing"` — unknown senders are silently ignored until approved via CLI | Already shipped: `src/openclaw.json` sets `dmPolicy: "open"` + `allowFrom: ["*"]`. Single-tenant AAD + Easy Auth keeps reach scoped to the deployer's tenant. |
+| Direct Line / Web Chat / Teams test channel: user message acked (200) but bot reply never arrives. Container logs show `Blocked Microsoft Teams serviceUrl host: directline.botframework.com` | The bundled `@openclaw/msteams` plugin's SSRF guard only allows `smba.trafficmanager.net` + `smba.infra.{gcc,gov,dod}.*` (real Teams channel hosts). Direct Line uses `directline.botframework.com`, so every reply is silently dropped inside the streaming pipeline. | Already shipped: `src/patch-msteams-allowlist.mjs` runs at image build (see `src/Dockerfile`) and extends the plugin's allowlist to include `directline.botframework.com` + `europe.directline.botframework.com`. Idempotent. Remove once upstream plugin exposes a public hook. |
+| Bot reply attempt fails with `AADSTS7000229: The client application <bot-app-id> is missing service principal in the tenant <tenant-id>` | The Bot App Registration was created without an enterprise application (service principal) in the consuming tenant — the Bot Framework token endpoint can't issue tokens to an appId with no SP. Happens when an app reg is provisioned via Graph without `az ad sp create`, or when the bot is consumed cross-tenant. | One-time fix: `az ad sp create --id $(azd env get-value BOT_APP_ID)`. If `az` is rate-limited, call Graph directly: `curl -s -X POST https://graph.microsoft.com/v1.0/servicePrincipals -H "Authorization: Bearer $(az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv)" -H "Content-Type: application/json" -d "{\"appId\":\"$(azd env get-value BOT_APP_ID)\"}"`. No redeploy needed — propagates in <30s. |
 | Bot replies in WebChat but not Teams | Teams channel off or wrong `botId` in sideload | Re-run `devclaw teams` |
 | `az containerapp exec`/`logs` crashes or hangs (🦞 Unicode / SSL) | Azure CLI bug | Use Azure Portal Console / Log stream |
 | `azd up` warns about permissions | azd heuristic | Safe to proceed, or grant `User Access Administrator` |
@@ -185,8 +188,8 @@ curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   `gateway-proxy` (`:18789`, splits ingress by path), the **OpenClaw gateway**
   (`:18788`), and the **auth-proxy** (`:18790`, injects a fresh MI bearer token).
 - **Azure OpenAI in Foundry Models** is called via the OpenAI-compatible
-  **Responses API** (`/openai/v1/responses`, adapter `azure-openai-responses` in
-  `src/openclaw.json`) — no `openai` npm SDK. `disableLocalAuth: true` (no keys).
+  REST API under `/openai/v1/...` (configured in `src/openclaw.json`) — no
+  `openai` npm SDK. `disableLocalAuth: true` (no keys).
 - **Managed Identity** has the **Cognitive Services User** role on the model account.
 - **Entra ID Easy Auth** forces Microsoft sign-in before the container; `/api/messages`
   is excluded so Bot Framework can call in with its own JWT.

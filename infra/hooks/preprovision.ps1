@@ -37,6 +37,12 @@ if ($botAppId) {
 
     $tenantId = az account show --query tenantId -o tsv 2>$null
 
+    # Create the service principal (enterprise application) for the bot app reg
+    # in this tenant. Without this, the Bot Framework token endpoint rejects
+    # the bot's appPassword with AADSTS7000229 ("missing service principal in
+    # the tenant"), which silently swallows every reply at activity-send time.
+    az ad sp create --id $botAppId 2>$null | Out-Null
+
     azd env set BOT_APP_ID $botAppId
     azd env set BOT_APP_SECRET $secret
     azd env set BOT_TENANT_ID $tenantId
