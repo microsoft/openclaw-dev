@@ -1,8 +1,14 @@
 # 🦞 openclaw-dev   
 
-> **Alpha** — Experimental template for a secure, hosted [OpenClaw](https://github.com/openclaw/openclaw) powered by OpenAI-compatible models. No production-readiness guarantees. Review all configurations before deploying with sensitive data.
+> **Alpha** — Experimental template for a secure, hosted [OpenClaw](https://github.com/openclaw/openclaw). No production-readiness guarantees. Review all configurations before deploying with sensitive data.
 
-A secure, hosted [OpenClaw](https://github.com/openclaw/openclaw) deployment wired to **any OpenAI-compatible Foundry Model** including Azure OpenAI models. For developers who want to try openclaw in the cloud without running it on their laptop. No local install. No API keys. Nuke-and-pave in one command.
+Your own **always-on AI assistant**, running safely in the cloud and reachable from **Microsoft Teams on your phone** — not on your laptop. Wired to **Azure OpenAI in Foundry Models** (with scope to add Claude and other Foundry Models in the near future). No local install. No API keys. One command to deploy, one to tear down.
+
+![openclaw architecture](docs/architecture.svg)
+
+**Why this template:** OpenClaw is powerful but runs arbitrary code and can be fooled by prompt injection — so you should not run it on your work machine. This template puts it in an **isolated, ephemeral container** instead, signs in your users with their **Microsoft work account**, and talks to the model with a **Managed Identity** so there are **no API keys anywhere**. See [Safety](#security) for the full defense-in-depth story.
+
+→ Jump to: [Quick start](#quick-start) · [Safety](#security) · [Use it from Teams](#teams-setup) · [Architecture](#architecture)
 
 ## Why cloud instead of your laptop?
 
@@ -85,7 +91,7 @@ Your own **always-on AI assistant** — accessible from Teams on your phone, the
 | Resource | Purpose |
 |---|---|
 | **Azure Container Apps** | Hosts OpenClaw gateway — public HTTPS on `:18789`, ephemeral container (host layer is swappable) |
-| **Azure OpenAI / Foundry Models** | LLM backend via the OpenAI-compatible `/openai/v1/` API — keyless (`disableLocalAuth: true`). Default: `gpt-5-mini`; any Microsoft Foundry model exposing the OpenAI API works |
+| **Azure OpenAI in Foundry Models** | LLM backend via the OpenAI-compatible `/openai/v1/` API — keyless (`disableLocalAuth: true`). Default: `gpt-5-mini`. (Scope to add Claude and other Foundry Models in the near future) |
 | **Azure Bot Service** | Bot Framework registration that fronts the Teams channel; routes inbound Teams activity to the container's `/api/messages` |
 | **Managed Identity** | Container → model auth via short-lived Entra ID tokens |
 | **Entra ID Easy Auth** | Microsoft login required before reaching the WebChat UI. `/api/messages` is excluded so Bot Framework can call in with its own JWT |
@@ -112,7 +118,7 @@ graph LR
         MST["📥 @openclaw/msteams<br/>:3978 · /api/messages"]
         Auth["🔑 auth-proxy<br/>:18790 · injects MI bearer"]
     end
-    AOAI["OpenAI-compatible model<br/>Microsoft Foundry Models / Azure OpenAI<br/>disableLocalAuth: true"]
+    AOAI["Azure OpenAI in Foundry Models<br/>OpenAI-compatible /openai/v1 API<br/>disableLocalAuth: true"]
     MI["Managed Identity<br/>Entra ID token"]
     AF["Azure Files<br/>credentials / workspace / sessions"]
 

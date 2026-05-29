@@ -60,8 +60,8 @@ var effectiveOpenaiLocation = empty(openaiLocation) ? location : openaiLocation
 
 // ---------------------------------------------------------------------------
 // 1. AI model — deployed to Azure OpenAI / Microsoft Foundry Models (OpenAI-compatible API)
-//    Model name/version are parameterized so any Foundry model exposing the
-//    OpenAI API surface can be used here in the future.
+//    Model name/version are parameterized; today this targets Azure OpenAI models,
+//    with scope to add Claude and other Foundry Models in the near future.
 // ---------------------------------------------------------------------------
 module openai 'resources.bicep' = {
   name: 'openai'
