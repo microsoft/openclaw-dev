@@ -95,6 +95,7 @@ not `devclaw test`.
 | `BOT_APP_ID` / `BOT_APP_SECRET` / `BOT_TENANT_ID` | auto | — | Created by the preprovision hook; do not set by hand |
 | `EASYAUTH_APP_ID` | auto | — | Created by the preprovision hook |
 | `SERVICE_OPENCLAW_IMAGE_NAME` | auto | — | Populated by azd after first deploy |
+| `AOAI_DEFAULT_API_VERSION` | no | unset | Escape hatch in `src/auth-proxy.mjs`. Only set when targeting a **non-v1** AOAI surface (e.g. `2024-10-21`). When set, the proxy appends `?api-version=<value>` to `/openai/...` requests that don't already have one. Leave unset for the shipped v1 (`/openai/v1/...`) path. |
 
 **Allowed `AZURE_LOCATION` values:** `australiaeast`, `eastasia`, `eastus`, `eastus2`,
 `japaneast`, `koreacentral`, `southindia`, `swedencentral`, `switzerlandnorth`,
@@ -131,10 +132,19 @@ azd env set AZURE_OPENAI_LOCATION eastus2
 
 ### Connect to Microsoft Teams (phone access)
 1. `devclaw teams` — enables the Teams channel on the Azure Bot and builds
-   `teams/openclaw-teams-app.zip` (regenerated; gitignored).
+   `teams/openclaw-teams-app.zip` (regenerated; gitignored). The zip is baked
+   from `teams/manifest.json` (committed source); `teams/package/manifest.json`
+   is the generated copy and is gitignored — only edit the source.
 2. In Teams: **Apps → Manage your apps → Upload a custom app →** select the zip → **Add** → DM the bot.
 - Requires `pwsh` on Windows. The msteams plugin must be active in `src/openclaw.json`
   (`plugins.allow: ["msteams"]` + `plugins.entries.msteams.enabled: true`) — already shipped.
+- **Legal URLs in the manifest** show up in Teams' *About* dialog ("Created by …",
+  *Privacy policy*, *Terms of use*). The shipped `teams/manifest.json` points
+  `privacyUrl` and `termsOfUseUrl` at Microsoft's generic statements
+  (`microsoft.com/en-us/privacy/privacystatement`,
+  `microsoft.com/en-us/legal/terms-of-use`) and `websiteUrl` at the README's
+  `#alpha` anchor so users see the alpha caveat. Anyone forking under a different
+  org **must** repoint these to their own policy URLs before sideloading.
 
 ### Restrict access to specific users/groups
 Easy Auth is configured automatically by `devclaw up`. To lock it down:
@@ -188,8 +198,10 @@ curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   `gateway-proxy` (`:18789`, splits ingress by path), the **OpenClaw gateway**
   (`:18788`), and the **auth-proxy** (`:18790`, injects a fresh MI bearer token).
 - **Azure OpenAI in Foundry Models** is called via the OpenAI-compatible
-  REST API under `/openai/v1/...` (configured in `src/openclaw.json`) — no
-  `openai` npm SDK. `disableLocalAuth: true` (no keys).
+  REST API under `/openai/v1/...` — `src/openclaw.json` sets the adapter to
+  `"api": "openai-completions"` and `src/auth-proxy.mjs` injects the MI bearer.
+  No `openai` npm SDK. `disableLocalAuth: true` (no keys). To target a non-v1
+  AOAI surface, set `AOAI_DEFAULT_API_VERSION` (see env-var table).
 - **Managed Identity** has the **Cognitive Services User** role on the model account.
 - **Entra ID Easy Auth** forces Microsoft sign-in before the container; `/api/messages`
   is excluded so Bot Framework can call in with its own JWT.
