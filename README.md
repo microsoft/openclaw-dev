@@ -1,10 +1,16 @@
 # 🦞 openclaw-dev   
 
+**Short link:** <https://aka.ms/openclaw-dev>
+
 <a id="alpha"></a>
 
 > **⚠️ Alpha** — Experimental template for a secure, hosted [OpenClaw](https://github.com/openclaw/openclaw). **No production-readiness guarantees** — features, infrastructure, and configuration may change without notice. Conversations flow through the configured model endpoint. Review the [Safety](#security) section before deploying with sensitive data, and treat any conversation here as if it were sent to any other cloud AI service.
 
 Your own **always-on AI assistant**, running safely in the cloud and reachable from **Microsoft Teams on your phone** — not on your laptop. Wired to **Azure OpenAI in Foundry Models** (with scope to add Claude and other Foundry Models in the near future). No local install. No API keys. One command to deploy, one to tear down.
+
+![openclaw architecture](docs/architecture.svg)
+
+→ Jump to: [Alpha caveats](#alpha) · [Ask Copilot](#need-help-ask-copilot) · [Quick start](#quick-start) · [Safety](#security) · [Use it from Teams](#teams-setup) · [Architecture](#architecture)
 
 ## Why you should care
 
@@ -16,10 +22,6 @@ OpenClaw is powerful but runs arbitrary code and can be fooled by prompt injecti
 - ♻️ **Wipe and rebuild in ~6 minutes** — if anything ever feels off, `devclaw down && devclaw up` gives you a clean slate.
 
 See [Safety](#security) for the full defense-in-depth story, or skip straight to [Quick start](#quick-start).
-
-![openclaw architecture](docs/architecture.svg)
-
-→ Jump to: [Alpha caveats](#alpha) · [Ask Copilot](#need-help-ask-copilot) · [Quick start](#quick-start) · [Safety](#security) · [Use it from Teams](#teams-setup) · [Architecture](#architecture)
 
 ## Need help? Ask Copilot
 
