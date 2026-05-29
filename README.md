@@ -20,7 +20,9 @@ memorize `azd` env vars or scroll the troubleshooting tables.
 
 **How to use it:** clone the repo, open it in VS Code with
 [GitHub Copilot Chat](https://docs.github.com/copilot) (or your preferred agent),
-and just ask. Try:
+and just ask. (Already cloned the repo? Your agent picks the skill up
+automatically. To add it to a different workspace, run
+`npx skills add microsoft/openclaw-dev`.) Try:
 
 - *"Deploy OpenClaw to `eastus2`."*
 - *"Connect it to Microsoft Teams so I can use it from my phone."*
