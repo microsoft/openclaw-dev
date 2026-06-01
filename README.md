@@ -13,7 +13,7 @@ description: Deploy OpenClaw with Azure OpenAI using one CLI command. Talk to th
 -->
 # 🦞 openclaw-dev
 
-A small dev tool that deploys [OpenClaw](https://github.com/openclaw/openclaw) as a hosted assistant you can DM from Microsoft Teams on your phone. Uses Azure OpenAI in Foundry Models for the backend (default `gpt-5-mini`). Claude and other Foundry Models are on the roadmap.
+A small dev tool that deploys [OpenClaw](https://github.com/openclaw/openclaw) as a hosted assistant you can DM from Microsoft Teams on your phone. Uses Azure OpenAI in Foundry Models for the backend (default `gpt-5-mini`).
 
 Short link: <https://aka.ms/openclaw-dev>
 
