@@ -19,67 +19,13 @@ Short link: <https://aka.ms/openclaw-dev>
 
 <a id="alpha"></a>
 
-> **⚠️ Alpha.** Dev/test template, not a product. No production guarantees. Features, infra, and config can change without notice. Conversations go through the model endpoint you configure, so treat them like any other cloud AI chat. Read [Safety](#security) before pasting anything sensitive.
-
-The idea: OpenClaw is a useful agent runtime, but it runs arbitrary code. This repo deploys it to a disposable cloud sandbox, gated by your Microsoft sign-in, with no API keys anywhere. One command up, one command down.
+> **⚠️ Alpha.** This is a developer tool with no production guarantees. Read [Security](#security) before pasting anything sensitive.
 
 ![openclaw architecture](docs/architecture.svg)
 
-→ Jump to: [Alpha caveats](#alpha) · [Ask Copilot](#need-help-ask-copilot) · [Quick start](#quick-start) · [Safety](#security) · [Use it from Teams](#teams-setup) · [Architecture](#architecture)
+The idea: OpenClaw is a useful agent runtime, but it runs arbitrary code. This repo deploys it to a disposable cloud sandbox, gated by your Microsoft sign-in, with no API keys anywhere. One command up, one command down.
 
-## Why you should care
-
-The whole point of this template is the safety story. Four things, in plain words:
-
-- 🔒 **Only people you let in can chat with it.** Microsoft sign-in via Entra ID, scoped to your tenant.
-- 🗝️ **No passwords or API keys anywhere.** A managed identity calls the model. Local auth is disabled at the model account, so keys don't exist.
-- 🧪 **Runs in a throwaway cloud sandbox, not on your laptop.** A bad prompt or a malicious skill can't reach your work credentials.
-- ♻️ **Wipe and rebuild in about 6 minutes.** `devclaw down && devclaw up` gives you a clean slate.
-
-See [Safety](#security) for the full defense-in-depth story, or skip to [Quick start](#quick-start).
-
-## Need help? Ask Copilot
-
-This repo ships an **AI agent skill** so any assistant that reads
-[`.github/copilot-instructions.md`](.github/copilot-instructions.md) or
-[`AGENTS.md`](AGENTS.md) (GitHub Copilot Chat, Claude Code, Cursor, Codex, and
-friends) can set up and run everything for you. No need to memorize `azd` env
-vars or scroll the troubleshooting tables.
-
-**How to use it:** clone the repo, open it in VS Code with
-[GitHub Copilot Chat](https://docs.github.com/copilot) (or your preferred agent),
-and just ask. (Already cloned the repo? Your agent picks the skill up
-automatically. To add it to a different workspace, run
-`npx skills add microsoft/openclaw-dev`.) Try:
-
-- *"Deploy OpenClaw to `eastus2`."*
-- *"Connect it to Microsoft Teams so I can use it from my phone."*
-- *"Why is `devclaw up` failing?"*
-- *"Stop it to save money, then start it again tomorrow."*
-- *"Restrict access to just my team."*
-- *"Tear it all down cleanly."*
-
-The assistant follows the playbook in
-[`skills/openclaw-on-azure/SKILL.md`](skills/openclaw-on-azure/SKILL.md) and the
-always-on rules in [`.github/copilot-instructions.md`](.github/copilot-instructions.md).
-It uses this repo's own scripts, env-var contract, region list, and error
-catalog instead of guessing, and always confirms with you before any destructive
-action (`devclaw down`, `az ad app delete`, RBAC removal). The skill follows the
-open [Agent Skills](https://agentskills.io/) format, so it works across many
-agents.
-
-## Why cloud instead of your laptop?
-
-OpenClaw runs arbitrary code and can be deceived by prompt injection. **Don't run it on your work machine.** This template gives you an isolated, ephemeral container instead.
-
-| | Your laptop ❌ | This template ✅ |
-|---|---|---|
-| **Isolation** | Shares your credentials | Ephemeral container. Nothing to compromise |
-| **Credentials** | API keys on disk | Managed identity. No keys anywhere |
-| **Nuke & pave** | Reinstall OS | `devclaw down && devclaw up` (~6 min) |
-| **Always on** | Only when open | Always on. `devclaw stop` = $0 |
-| **Teams/mobile** | Only when laptop is on | Always connected |
-| **Cost** | Your hardware | ~$2-5/day running, $0 stopped |
+→ Jump to: [Quick start](#quick-start) · [Use it from Teams](#teams-setup) · [Security](#security) · [Architecture](#architecture) · [Alpha caveats](#alpha) · [Ask Copilot](#need-help-ask-copilot)
 
 ## Quick start
 
@@ -118,6 +64,97 @@ devclaw logs     # Tail logs until you see `[gateway] starting HTTP server`
 
 After deployment, open the URL from `devclaw status` in your browser. If Entra ID Easy Auth is configured, you'll be prompted to sign in with your Microsoft account. After that the chat UI loads automatically with no further credentials needed.
 
+## Teams Setup
+
+Connect OpenClaw to Microsoft Teams so you can chat with it from your phone.
+
+### Step 1: Enable Teams and build the app package
+
+```bash
+devclaw teams
+```
+
+This automatically:
+- Enables the Microsoft Teams channel on your Azure Bot (created by `devclaw up`)
+- Builds a sideloadable Teams app package (`teams/openclaw-teams-app.zip`)
+
+### Step 2: Install in Teams
+
+1. Teams → **Apps** → **Manage your apps** → **Upload a custom app**
+2. Select `teams/openclaw-teams-app.zip`
+3. **Add** → DM the bot to test
+
+<details>
+<summary>How the Teams integration works (deep dive)</summary>
+
+The Teams channel is handled by **`@openclaw/msteams`**, an external OpenClaw plugin installed at container-build time. It opens its own Express server on `:3978` for the Bot Framework webhook (`/api/messages`). Because ACA exposes only a single public port, [src/gateway-proxy.mjs](src/gateway-proxy.mjs) listens on `:18789` and routes `/api/messages` to the plugin and everything else to the OpenClaw gateway.
+
+The plugin must be **explicitly activated** in [src/openclaw.json](src/openclaw.json); `channels.msteams.enabled: true` alone is not enough for external (non-bundled) plugins. The repo ships with the required block already in place:
+
+```json
+"plugins": {
+  "enabled": true,
+  "allow": ["msteams"],
+  "entries": { "msteams": { "enabled": true } }
+}
+```
+
+If you ever see startup logs like `[gateway] http server listening (N plugins: …)` **without** `msteams` in the list, that block is missing or has been overwritten by a stale state file on Azure Files. The entrypoint restores [src/openclaw.json](src/openclaw.json) from the canonical copy on every boot to prevent this drift.
+
+</details>
+
+## Why
+
+The whole point of this template is the safety story. Four things, in plain words:
+
+- 🔒 **Only people you let in can chat with it.** Microsoft sign-in via Entra ID, scoped to your tenant.
+- 🗝️ **No passwords or API keys anywhere.** A managed identity calls the model. Local auth is disabled at the model account, so keys don't exist.
+- 🧪 **Runs in a throwaway cloud sandbox, not on your laptop.** A bad prompt or a malicious skill can't reach your work credentials.
+- ♻️ **Wipe and rebuild in about 6 minutes.** `devclaw down && devclaw up` gives you a clean slate.
+
+OpenClaw runs arbitrary code and can be deceived by prompt injection. **Don't run it on your work machine.** This template gives you an isolated, ephemeral container instead:
+
+| | Your laptop ❌ | This template ✅ |
+|---|---|---|
+| **Isolation** | Shares your credentials | Ephemeral container. Nothing to compromise |
+| **Credentials** | API keys on disk | Managed identity. No keys anywhere |
+| **Nuke & pave** | Reinstall OS | `devclaw down && devclaw up` (~6 min) |
+| **Always on** | Only when open | Always on. `devclaw stop` = $0 |
+| **Teams/mobile** | Only when laptop is on | Always connected |
+| **Cost** | Your hardware | ~$2-5/day running, $0 stopped |
+
+See [Security](#security) for the full defense-in-depth story.
+
+## Need help? Ask Copilot
+
+This repo ships an **AI agent skill** so any assistant that reads
+[`.github/copilot-instructions.md`](.github/copilot-instructions.md) or
+[`AGENTS.md`](AGENTS.md) (GitHub Copilot Chat, Claude Code, Cursor, Codex, and
+friends) can set up and run everything for you. No need to memorize `azd` env
+vars or scroll the troubleshooting tables.
+
+**How to use it:** clone the repo, open it in VS Code with
+[GitHub Copilot Chat](https://docs.github.com/copilot) (or your preferred agent),
+and just ask. (Already cloned the repo? Your agent picks the skill up
+automatically. To add it to a different workspace, run
+`npx skills add microsoft/openclaw-dev`.) Try:
+
+- *"Deploy OpenClaw to `eastus2`."*
+- *"Connect it to Microsoft Teams so I can use it from my phone."*
+- *"Why is `devclaw up` failing?"*
+- *"Stop it to save money, then start it again tomorrow."*
+- *"Restrict access to just my team."*
+- *"Tear it all down cleanly."*
+
+The assistant follows the playbook in
+[`skills/openclaw-on-azure/SKILL.md`](skills/openclaw-on-azure/SKILL.md) and the
+always-on rules in [`.github/copilot-instructions.md`](.github/copilot-instructions.md).
+It uses this repo's own scripts, env-var contract, region list, and error
+catalog instead of guessing, and always confirms with you before any destructive
+action (`devclaw down`, `az ad app delete`, RBAC removal). The skill follows the
+open [Agent Skills](https://agentskills.io/) format, so it works across many
+agents.
+
 ## CLI reference
 
 ```
@@ -144,7 +181,43 @@ Always-on assistant, reachable from Teams on your phone, the WebChat UI, or any 
 - Paste a GitHub PR link, get review notes.
 - Track sessions across the week and get a status summary.
 
-Skills are sandboxed inside the container. Only install ones you trust (see [Safety](#security)).
+Skills are sandboxed inside the container. Only install ones you trust (see [Security](#security)).
+
+## Security
+
+### Defense in depth
+
+This template applies **four independent layers** of security. An attacker must defeat all of them to reach the AI backend:
+
+| Layer | What it does |
+|---|---|
+| **1. Entra ID Easy Auth** | Microsoft login required before any request reaches the container. Deployed automatically by `devclaw up`. Unauthenticated requests get a 401. Scoped to your tenant. |
+| **2. Gateway token** | A random per-container token is injected into the SPA at startup. Even an authenticated user cannot call the WebSocket API without it. |
+| **3. Managed Identity (no API keys)** | The container authenticates to the model endpoint via short-lived Entra ID tokens. `disableLocalAuth: true` means API keys don't even exist. |
+| **4. Ephemeral container** | State is on Azure Files; the container itself is disposable. `devclaw down && devclaw up` = clean slate in 6 minutes. |
+
+### What to be aware of
+
+- **Skills run arbitrary code.** A malicious skill can access the managed identity. Only install trusted skills.
+- **Prompt injection.** OpenClaw is susceptible. Nuke and repave if behavior changes.
+- **Container runs as root.** Add a non-root user for hardened deployments.
+- **Conversations flow through the model endpoint.** Don't paste highly sensitive data.
+
+### Adding Entra ID Easy Auth
+
+Easy Auth is configured automatically by `devclaw up`. The preprovision hook creates an Entra ID app registration, Bicep enables the auth config on the Container App, and the postprovision hook updates the redirect URI. No manual steps needed.
+
+To restrict access to specific users or groups, update the app registration in the Azure Portal:
+1. **Azure Portal** → **Entra ID** → **App registrations** → `openclaw-auth-<env>`
+2. **Properties** → **Assignment required?** → **Yes**
+3. **Enterprise applications** → assign specific users/groups
+
+### Usage guidelines
+
+1. **Don't paste confidential data.** Conversations flow through the configured model endpoint.
+2. **Don't install credential-heavy skills.** No email, bank, or internal API skills.
+3. **Nuke and pave regularly.** `devclaw down && devclaw up` if anything seems off.
+4. **Monitor logs.** `devclaw logs`.
 
 ## Architecture
 
@@ -210,78 +283,6 @@ All dependencies are pinned at container build time (see [src/Dockerfile](src/Do
 **How AOAI/Foundry is accessed**: OpenClaw speaks the **OpenAI-compatible REST API** under `/openai/v1/...` directly (see [src/openclaw.json](src/openclaw.json) for the configured adapter). It does not depend on the official `openai` npm SDK or the older `@azure/openai` SDK. Requests flow `gateway → auth-proxy → AOAI/Foundry`; the auth-proxy attaches the MI bearer token at the wire level, so AOAI's `disableLocalAuth: true` works without API keys anywhere in the system. The auth-proxy is path-agnostic (it forwards `req.url` as-is), so the same proxy works for any OpenAI-compatible surface (chat, embeddings, audio, images).
 
 **How Teams is accessed**: Inbound activities come in over HTTPS from Bot Framework to `/api/messages`. The `@openclaw/msteams` plugin validates the JWT and uses `@microsoft/teams.api` + `@microsoft/teams.apps` for everything from there: activity dispatch, replies, streaming, adaptive cards.
-
-## Security
-
-### Defense in depth
-
-This template applies **four independent layers** of security. An attacker must defeat all of them to reach the AI backend:
-
-| Layer | What it does |
-|---|---|
-| **1. Entra ID Easy Auth** | Microsoft login required before any request reaches the container. Deployed automatically by `devclaw up`. Unauthenticated requests get a 401. Scoped to your tenant. |
-| **2. Gateway token** | A random per-container token is injected into the SPA at startup. Even an authenticated user cannot call the WebSocket API without it. |
-| **3. Managed Identity (no API keys)** | The container authenticates to the model endpoint via short-lived Entra ID tokens. `disableLocalAuth: true` means API keys don't even exist. |
-| **4. Ephemeral container** | State is on Azure Files; the container itself is disposable. `devclaw down && devclaw up` = clean slate in 6 minutes. |
-
-### What to be aware of
-
-- **Skills run arbitrary code.** A malicious skill can access the managed identity. Only install trusted skills.
-- **Prompt injection.** OpenClaw is susceptible. Nuke and repave if behavior changes.
-- **Container runs as root.** Add a non-root user for hardened deployments.
-- **Conversations flow through the model endpoint.** Don't paste highly sensitive data.
-
-### Adding Entra ID Easy Auth
-
-Easy Auth is configured automatically by `devclaw up`. The preprovision hook creates an Entra ID app registration, Bicep enables the auth config on the Container App, and the postprovision hook updates the redirect URI. No manual steps needed.
-
-To restrict access to specific users or groups, update the app registration in the Azure Portal:
-1. **Azure Portal** → **Entra ID** → **App registrations** → `openclaw-auth-<env>`
-2. **Properties** → **Assignment required?** → **Yes**
-3. **Enterprise applications** → assign specific users/groups
-
-### Usage guidelines
-
-1. **Don't paste confidential data.** Conversations flow through the configured model endpoint.
-2. **Don't install credential-heavy skills.** No email, bank, or internal API skills.
-3. **Nuke and pave regularly.** `devclaw down && devclaw up` if anything seems off.
-4. **Monitor logs.** `devclaw logs`.
-
-## Teams Setup
-
-Connect OpenClaw to Microsoft Teams so you can chat with it from your phone.
-
-### Step 1: Enable Teams and build the app package
-
-```bash
-devclaw teams
-```
-
-This automatically:
-- Enables the Microsoft Teams channel on your Azure Bot (created by `devclaw up`)
-- Builds a sideloadable Teams app package (`teams/openclaw-teams-app.zip`)
-
-### Step 2: Install in Teams
-
-1. Teams → **Apps** → **Manage your apps** → **Upload a custom app**
-2. Select `teams/openclaw-teams-app.zip`
-3. **Add** → DM the bot to test
-
-### How the Teams integration works
-
-The Teams channel is handled by **`@openclaw/msteams`**, an external OpenClaw plugin installed at container-build time. It opens its own Express server on `:3978` for the Bot Framework webhook (`/api/messages`). Because ACA exposes only a single public port, [src/gateway-proxy.mjs](src/gateway-proxy.mjs) listens on `:18789` and routes `/api/messages` to the plugin and everything else to the OpenClaw gateway.
-
-The plugin must be **explicitly activated** in [src/openclaw.json](src/openclaw.json); `channels.msteams.enabled: true` alone is not enough for external (non-bundled) plugins. The repo ships with the required block already in place:
-
-```json
-"plugins": {
-  "enabled": true,
-  "allow": ["msteams"],
-  "entries": { "msteams": { "enabled": true } }
-}
-```
-
-If you ever see startup logs like `[gateway] http server listening (N plugins: …)` **without** `msteams` in the list, that block is missing or has been overwritten by a stale state file on Azure Files. The entrypoint restores [src/openclaw.json](src/openclaw.json) from the canonical copy on every boot to prevent this drift.
 
 ## Troubleshooting
 
