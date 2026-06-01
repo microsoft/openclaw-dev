@@ -23,7 +23,7 @@ Short link: <https://aka.ms/openclaw-dev>
 
 ![openclaw architecture](docs/architecture.svg)
 
-The idea: OpenClaw is a useful agent runtime, but it runs arbitrary code. This repo deploys it to a disposable cloud sandbox, gated by your Microsoft sign-in, with no API keys anywhere. One command up, one command down.
+The idea: OpenClaw is a useful agent runtime, but it runs arbitrary code. This repo deploys it to a disposable cloud sandbox, gated by your Microsoft sign-in, with no model API keys. One command up, one command down.
 
 → Jump to: [Quick start](#quick-start) · [Use it from Teams](#teams-setup) · [Security](#security) · [Architecture](#architecture) · [Alpha caveats](#alpha) · [Ask Copilot](#need-help-ask-copilot)
 
@@ -108,16 +108,16 @@ If you ever see startup logs like `[gateway] http server listening (N plugins: �
 The whole point of this template is the safety story. Four things, in plain words:
 
 - 🔒 **Only people you let in can chat with it.** Microsoft sign-in via Entra ID, scoped to your tenant.
-- 🗝️ **No passwords or API keys anywhere.** A managed identity calls the model. Local auth is disabled at the model account, so keys don't exist.
-- 🧪 **Runs in a throwaway cloud sandbox, not on your laptop.** A bad prompt or a malicious skill can't reach your work credentials.
+- 🗝️ **No model API keys.** A managed identity calls the model. Local auth is disabled at the model account, so model keys don't exist.
+- 🧪 **Runs in a throwaway cloud sandbox, not on your laptop.** A bad prompt or a malicious skill can't reach your laptop's credentials.
 - ♻️ **Wipe and rebuild in about 6 minutes.** `devclaw down && devclaw up` gives you a clean slate.
 
 OpenClaw runs arbitrary code and can be deceived by prompt injection. **Don't run it on your work machine.** This template gives you an isolated, ephemeral container instead:
 
 | | Your laptop ❌ | This template ✅ |
 |---|---|---|
-| **Isolation** | Shares your credentials | Ephemeral container. Nothing to compromise |
-| **Credentials** | API keys on disk | Managed identity. No keys anywhere |
+| **Isolation** | Shares your credentials | Ephemeral container. Bounded blast radius |
+| **Credentials** | API keys on disk | Managed identity. No model API keys |
 | **Nuke & pave** | Reinstall OS | `devclaw down && devclaw up` (~6 min) |
 | **Always on** | Only when open | Always on. `devclaw stop` = $0 |
 | **Teams/mobile** | Only when laptop is on | Always connected |
@@ -173,7 +173,7 @@ devclaw login      Switch Azure account
 
 ## What can I do with this?
 
-Always-on assistant, reachable from Teams on your phone, the WebChat UI, or any OpenClaw channel. A few things people actually use it for:
+Always-on assistant, reachable from Teams on your phone, the WebChat UI, or any OpenClaw channel. Examples:
 
 - Paste a meeting transcript, get action items.
 - Paste an email thread, get a draft reply.
@@ -187,13 +187,13 @@ Skills are sandboxed inside the container. Only install ones you trust (see [Sec
 
 ### Defense in depth
 
-This template applies **four independent layers** of security. An attacker must defeat all of them to reach the AI backend:
+This template applies **four independent layers** of defense, each guarding something different:
 
 | Layer | What it does |
 |---|---|
 | **1. Entra ID Easy Auth** | Microsoft login required before any request reaches the container. Deployed automatically by `devclaw up`. Unauthenticated requests get a 401. Scoped to your tenant. |
 | **2. Gateway token** | A random per-container token is injected into the SPA at startup. Even an authenticated user cannot call the WebSocket API without it. |
-| **3. Managed Identity (no API keys)** | The container authenticates to the model endpoint via short-lived Entra ID tokens. `disableLocalAuth: true` means API keys don't even exist. |
+| **3. Managed Identity (no model API keys)** | The container authenticates to the model endpoint via short-lived Entra ID tokens. `disableLocalAuth: true` means model API keys don't even exist. |
 | **4. Ephemeral container** | State is on Azure Files; the container itself is disposable. `devclaw down && devclaw up` = clean slate in 6 minutes. |
 
 ### What to be aware of
@@ -224,7 +224,7 @@ To restrict access to specific users or groups, update the app registration in t
 | Resource | Purpose |
 |---|---|
 | **Azure Container Apps** | Hosts the OpenClaw gateway. Public HTTPS on `:18789`. Ephemeral container (host layer is swappable) |
-| **Azure OpenAI in Foundry Models** | LLM backend via the OpenAI-compatible `/openai/v1/` API. Keyless (`disableLocalAuth: true`). Default: `gpt-5-mini`. (Scope to add Claude and other Foundry Models in the near future) |
+| **Azure OpenAI in Foundry Models** | LLM backend via the OpenAI-compatible `/openai/v1/` API. Keyless (`disableLocalAuth: true`). Default: `gpt-5-mini`. Azure OpenAI models only today. |
 | **Azure Bot Service** | Bot Framework registration that fronts the Teams channel; routes inbound Teams activity to the container's `/api/messages` |
 | **Managed Identity** | Container → model auth via short-lived Entra ID tokens |
 | **Entra ID Easy Auth** | Microsoft login required before reaching the WebChat UI. `/api/messages` is excluded so Bot Framework can call in with its own JWT |
@@ -275,7 +275,7 @@ All dependencies are pinned at container build time (see [src/Dockerfile](src/Do
 |---|---|---|---|
 | **`openclaw`** | `@latest` (≥ 2026.5.26) | The gateway runtime itself. Installed globally via `npm install -g openclaw@latest` | Refreshed on every `devclaw deploy` (no version pin = always latest at build time) |
 | **`@openclaw/msteams`** | `2026.5.26` | External OpenClaw plugin that owns the Teams channel: validates Bot Framework JWTs, parses activities, sends replies | Installed via `openclaw plugins install npm:@openclaw/msteams`. Bundles its own copies of the Teams SDKs below |
-| **`@microsoft/teams.api`** | `2.0.11` (plugin-bundled) / `2.0.6` (Docker-side compat) | Microsoft's current Teams SDK. REST client for the Bot Connector and Graph surfaces. Successor to the deprecated `botbuilder` line | v2.0 line went GA in late 2024; **roughly 12–18 months old** (mid-2024 to May 2026) |
+| **`@microsoft/teams.api`** | `2.0.11` (plugin-bundled) / `2.0.6` (Docker-side compat) | Microsoft's current Teams SDK. REST client for the Bot Connector and Graph surfaces. Successor to the `botbuilder` line | v2.0 line went GA in late 2024; **roughly 12–18 months old** (mid-2024 to May 2026) |
 | **`@microsoft/teams.apps`** | `2.0.11` (plugin-bundled) / `2.0.6` (Docker-side compat) | High-level Teams app/agent framework. Message routing, conversation state, adapters. Built on top of `teams.api` | Same generation as `teams.api`; **roughly 12–18 months old** |
 | **`@azure/identity`** | `4.13.1` (plugin-bundled) / latest (auth-proxy) | Used by the auth-proxy and the msteams plugin for `DefaultAzureCredential` and `getBearerTokenProvider`. Fetches, caches, and refreshes Entra ID tokens for AOAI and Bot Framework | The 4.x line has been the active major since early 2024 |
 | **`http-proxy`** | latest (auth-proxy install) | Powers [src/gateway-proxy.mjs](src/gateway-proxy.mjs). Splits ingress by URL path | Long-lived, stable library |
