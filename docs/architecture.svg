@@ -169,7 +169,7 @@
               stroke="#0E7C66" stroke-width="2" fill="none" stroke-linecap="round"/>
         <text x="46" y="18" font-size="15" font-weight="700" fill="#0A2540">Wipe and rebuild</text>
         <text x="46" y="40" font-size="15" font-weight="700" fill="#0A2540">in ~6 minutes</text>
-        <text x="46" y="62" font-size="11" fill="#5A7184">(devclaw down &amp;&amp; up = clean slate)</text>
+        <text x="46" y="62" font-size="11" fill="#5A7184">(devclaw down &amp;&amp; up = reset)</text>
       </g>
     </g>
   </g>
