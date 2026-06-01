@@ -123,42 +123,42 @@
     <path d="M 18 0 H 422 A 18 18 0 0 1 440 18 V 12 H 0 V 18 A 18 18 0 0 1 18 0 Z" fill="#6EE7B7"/>
 
     <!-- Title — larger, with subtle mint accent on the subtitle -->
-    <text x="22" y="42" font-size="19" font-weight="700" fill="#0A2540">
-      Why this is safe<tspan font-size="13" font-weight="500" fill="#10B981">  — in plain English</tspan>
+    <text x="22" y="54" font-size="26" font-weight="700" fill="#0A2540">
+      Why this is safe<tspan font-size="15" font-weight="500" fill="#10B981">  — in plain English</tspan>
     </text>
 
-    <!-- Row 1 (y=70) -->
-    <g transform="translate(22,70)">
+    <!-- Row 1 (y=105) — moved down to give the larger title room to breathe -->
+    <g transform="translate(22,105)">
       <!-- Badge 1: Microsoft sign-in -->
       <g>
         <circle cx="18" cy="18" r="15" fill="#DBEAFE"/>
         <rect x="12" y="17" width="12" height="11" rx="1.5" fill="#1D4ED8"/>
         <path d="M14 17 V13 a4 4 0 0 1 8 0 V17" fill="none" stroke="#1D4ED8" stroke-width="1.8"/>
-        <text x="46" y="16" font-size="13" font-weight="700" fill="#0A2540">Only people you let in</text>
-        <text x="46" y="34" font-size="13" font-weight="700" fill="#0A2540">can chat with it</text>
-        <text x="46" y="54" font-size="10" fill="#5A7184">(Microsoft sign-in required)</text>
+        <text x="46" y="18" font-size="15" font-weight="700" fill="#0A2540">Only people you let in</text>
+        <text x="46" y="40" font-size="15" font-weight="700" fill="#0A2540">can chat with it</text>
+        <text x="46" y="62" font-size="11" fill="#5A7184">(Microsoft sign-in required)</text>
       </g>
       <!-- Badge 2: No keys -->
       <g transform="translate(208,0)">
         <circle cx="18" cy="18" r="15" fill="#EDE9FE"/>
         <circle cx="15" cy="18" r="4" fill="none" stroke="#7C3AED" stroke-width="2"/>
         <path d="M19 18 L27 18 M24 18 V22 M27 18 V22" stroke="#7C3AED" stroke-width="2" stroke-linecap="round"/>
-        <text x="46" y="16" font-size="13" font-weight="700" fill="#0A2540">No passwords or</text>
-        <text x="46" y="34" font-size="13" font-weight="700" fill="#0A2540">API keys to steal</text>
-        <text x="46" y="54" font-size="10" fill="#5A7184">(Managed identity signs the calls)</text>
+        <text x="46" y="18" font-size="15" font-weight="700" fill="#0A2540">No passwords or</text>
+        <text x="46" y="40" font-size="15" font-weight="700" fill="#0A2540">API keys to steal</text>
+        <text x="46" y="62" font-size="11" fill="#5A7184">(Managed identity signs the calls)</text>
       </g>
     </g>
 
-    <!-- Row 2 (y=210 — generous gap so the subtitle above doesn't crowd the icon below) -->
+    <!-- Row 2 (y=210 — tightened against row 1; the old 70→210 jump left a visible empty band) -->
     <g transform="translate(22,210)">
       <!-- Badge 3: Throwaway sandbox -->
       <g>
         <circle cx="18" cy="18" r="15" fill="#FEE2E2"/>
         <rect x="10" y="11" width="16" height="14" rx="1.5" fill="none" stroke="#B91C1C" stroke-width="2"/>
         <path d="M14 11 V25 M22 11 V25" stroke="#B91C1C" stroke-width="1.2"/>
-        <text x="46" y="16" font-size="13" font-weight="700" fill="#0A2540">Runs in a</text>
-        <text x="46" y="34" font-size="13" font-weight="700" fill="#0A2540">throwaway sandbox</text>
-        <text x="46" y="54" font-size="10" fill="#5A7184">(Not on your laptop — blast radius is small)</text>
+        <text x="46" y="18" font-size="15" font-weight="700" fill="#0A2540">Runs in a</text>
+        <text x="46" y="40" font-size="15" font-weight="700" fill="#0A2540">throwaway sandbox</text>
+        <text x="46" y="62" font-size="11" fill="#5A7184">(Not on your laptop)</text>
       </g>
       <!-- Badge 4: Wipe and rebuild -->
       <g transform="translate(208,0)">
@@ -167,9 +167,9 @@
               stroke="#0E7C66" stroke-width="2" fill="none" stroke-linecap="round"/>
         <path d="M24 18 A6 6 0 0 1 18 24 L14 24 M14 24 L16 22 M14 24 L16 26"
               stroke="#0E7C66" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <text x="46" y="16" font-size="13" font-weight="700" fill="#0A2540">Wipe and rebuild</text>
-        <text x="46" y="34" font-size="13" font-weight="700" fill="#0A2540">in ~6 minutes</text>
-        <text x="46" y="54" font-size="10" fill="#5A7184">(devclaw down &amp;&amp; up = clean slate)</text>
+        <text x="46" y="18" font-size="15" font-weight="700" fill="#0A2540">Wipe and rebuild</text>
+        <text x="46" y="40" font-size="15" font-weight="700" fill="#0A2540">in ~6 minutes</text>
+        <text x="46" y="62" font-size="11" fill="#5A7184">(devclaw down &amp;&amp; up = clean slate)</text>
       </g>
     </g>
   </g>
