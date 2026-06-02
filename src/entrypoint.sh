@@ -4,6 +4,16 @@ echo "[openclaw] OpenClaw version: $(openclaw --version 2>&1)"
 echo "[openclaw] Auth mode: ${AZURE_OPENAI_AUTH:-api-key}"
 echo "[openclaw] OPENAI_BASE_URL: ${OPENAI_BASE_URL}"
 
+# When SKIP_STORAGE=true (Azure Policy blocks shared-key access on storage),
+# /mnt/state is not mounted. Fall back to an in-container ephemeral path so
+# the rest of the script (state restore + token persist) doesn't fail. State
+# will not survive a replica restart in that mode — documented trade-off.
+if [ ! -d /mnt/state ]; then
+    echo "[openclaw] /mnt/state not mounted — using ephemeral /var/openclaw-state (no persistence across restarts)"
+    mkdir -p /var/openclaw-state
+    ln -sfn /var/openclaw-state /mnt/state
+fi
+
 # Restore state
 for dir in credentials workspace sessions; do
     if [ -d "/mnt/state/$dir" ] && [ "$(ls -A /mnt/state/$dir 2>/dev/null)" ]; then

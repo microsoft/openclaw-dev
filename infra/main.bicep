@@ -53,6 +53,11 @@ param useExpressEnv string = 'false'
 
 var expressEnabled = toLower(useExpressEnv) == 'true'
 
+@description('Set SKIP_STORAGE=true in your azd env to skip the storage account + Azure Files volume mount. Use on subscriptions where Azure Policy blocks `allowSharedKeyAccess: true` on storage accounts (ACA file mounts require shared keys today). Trade-off: gateway token + sessions do not persist across replica restarts.')
+param skipStorage string = 'false'
+
+var storageSkipped = toLower(skipStorage) == 'true'
+
 @description('Region for the Azure OpenAI account. Defaults to `location`. Override (via AZURE_OPENAI_LOCATION) when the chosen `location` does not offer the target model SKU (e.g. ACA in `eastasia` with OpenAI in `eastus2`).')
 param openaiLocation string = ''
 
@@ -96,6 +101,7 @@ module host 'aca.bicep' = {
     easyAuthAppId: easyAuthAppId
     containerImage: containerImage
     useExpressEnv: expressEnabled
+    skipStorage: storageSkipped
   }
 }
 

@@ -25,6 +25,12 @@ It contains the command map, env-var contract, region list, and error catalog.
   enable the Teams add-on: `azd env set ENABLE_TEAMS true` then re-run
   `devclaw up` (or just run `devclaw teams`, which prompts and re-provisions).
   Don't create bot app registrations by default.
+- **Restricted subscriptions/tenants:** before `devclaw up`, set whichever of
+  these apply: `SERVICE_MANAGEMENT_REFERENCE=<service-tree-guid>` (tenants that
+  require it on new app regs), `SKIP_STORAGE=true` (subscriptions whose Azure
+  Policy blocks shared-key storage — ACA file mounts need shared keys today;
+  gateway token + sessions won't persist across replica restarts). ACR admin
+  is already disabled; image pulls use the container app's managed identity.
 - **Region** `AZURE_LOCATION` must be in the allowed list in `infra/main.bicep`;
   set `AZURE_OPENAI_LOCATION` separately if that region lacks the model SKU.
 - **Azure OpenAI only today** (default `gpt-5-mini`). Don't claim Claude / other

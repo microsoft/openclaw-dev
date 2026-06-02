@@ -105,6 +105,34 @@ restricted; leave Teams off and use the browser experience instead, or create
 the bot app registration manually and set `BOT_APP_ID`, `BOT_APP_SECRET`,
 and `BOT_TENANT_ID` via `azd env set` before running `devclaw teams`.
 
+## Restricted subscriptions / tenants
+
+If your subscription or tenant has Azure Policy assignments that block common
+defaults (Microsoft corp subscriptions are a common example), set these
+**before** `devclaw up`:
+
+```bash
+# Required service-tree GUID on every new app registration (Microsoft corp).
+azd env set SERVICE_MANAGEMENT_REFERENCE <your-service-tree-guid>
+
+# Azure Policy blocks shared-key storage. ACA file mounts need shared keys
+# today, so skip the storage account + Azure Files volume mount.
+# Trade-off: gateway token + sessions don't persist across replica restarts.
+azd env set SKIP_STORAGE true
+
+# Leave Teams off (default already) — bot secret creation is blocked.
+# If you need Teams, supply a pre-created bot app reg:
+#   azd env set BOT_APP_ID <id>
+#   azd env set BOT_APP_SECRET <secret>
+#   azd env set BOT_TENANT_ID <tenant>
+#   azd env set ENABLE_TEAMS true
+```
+
+You don't need a separate `SKIP_BOT_REGISTRATION` flag — Teams is already
+off by default. Other policies handled automatically: ACR admin is disabled
+out of the box (the container app pulls images via its system-assigned
+managed identity).
+
 <details>
 <summary>How the Teams integration works (deep dive)</summary>
 

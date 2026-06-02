@@ -6,6 +6,23 @@ $ErrorActionPreference = "Stop"
 $envName = $env:AZURE_ENV_NAME
 Write-Host "[preprovision] Environment: $envName"
 
+# azd points AZURE_CONFIG_DIR at a repo-local folder so it doesn't pollute the
+# user's az CLI config. That same folder typically has no signed-in account,
+# so `az` calls inside this hook fail with "Please run 'az login'". Probe
+# `az account show`; if it fails, clear AZURE_CONFIG_DIR so the CLI falls back
+# to its default (~/.azure on Linux, %USERPROFILE%\.azure on Windows) where
+# the user's real credentials live.
+& az account show -o none 2>$null
+if ($LASTEXITCODE -ne 0 -and $env:AZURE_CONFIG_DIR) {
+    Write-Host "[preprovision] az not authenticated in AZURE_CONFIG_DIR=$env:AZURE_CONFIG_DIR — falling back to default config dir"
+    Remove-Item Env:AZURE_CONFIG_DIR -ErrorAction SilentlyContinue
+    & az account show -o none 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[preprovision] ERROR: az still not authenticated. Run 'az login' and retry."
+        exit 1
+    }
+}
+
 # Helper: get azd env value, return empty string if key doesn't exist
 function Get-AzdValue($key) {
     $raw = azd env get-value $key 2>$null
@@ -18,6 +35,17 @@ function Get-AzdFlag($key) {
     $raw = azd env get-value $key 2>$null
     if ($null -eq $raw) { return "" }
     return ([string]$raw).Trim()
+}
+
+# Some tenants (e.g. Microsoft corp) require a serviceManagementReference
+# (a service tree GUID) on every new Entra ID app registration. When set,
+# pass it through to `az ad app create`. Get the right GUID from your
+# tenant admin or service tree, then: azd env set SERVICE_MANAGEMENT_REFERENCE <guid>
+$smr = Get-AzdFlag "SERVICE_MANAGEMENT_REFERENCE"
+$smrArgs = @()
+if ($smr) {
+    Write-Host "[preprovision] Using serviceManagementReference: $smr"
+    $smrArgs = @("--service-management-reference", $smr)
 }
 
 # ---------------------------------------------------------------------------
@@ -38,7 +66,7 @@ if ($botAppId) {
     $appName = "openclaw-bot-$envName"
     Write-Host "[preprovision] Creating bot app registration: $appName"
 
-    $botAppId = az ad app create --display-name $appName --sign-in-audience "AzureADMyOrg" --query appId -o tsv 2>$null
+    $botAppId = az ad app create --display-name $appName --sign-in-audience "AzureADMyOrg" @smrArgs --query appId -o tsv 2>$null
     if (-not $botAppId) {
         Write-Host "[preprovision] ERROR: Failed to create bot app registration"
         exit 1
@@ -82,6 +110,7 @@ if ($easyAuthAppId) {
     $easyAuthAppId = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
         --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" `
         --enable-id-token-issuance true `
+        @smrArgs `
         --query appId -o tsv 2>$null
     if (-not $easyAuthAppId) {
         Write-Host "[preprovision] Retrying Easy Auth app creation after 5s..."
@@ -89,6 +118,7 @@ if ($easyAuthAppId) {
         $easyAuthAppId = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
             --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" `
             --enable-id-token-issuance true `
+            @smrArgs `
             --query appId -o tsv 2>$null
     }
     if (-not $easyAuthAppId) {

@@ -7,10 +7,37 @@ set -euo pipefail
 ENV_NAME="${AZURE_ENV_NAME:-}"
 echo "[preprovision] Environment: $ENV_NAME"
 
+# azd points AZURE_CONFIG_DIR at a repo-local folder so it doesn't pollute the
+# user's az CLI config. That same folder typically has no signed-in account,
+# so `az` calls inside this hook fail with "Please run 'az login'". Probe
+# `az account show`; if it fails, clear AZURE_CONFIG_DIR so the CLI falls back
+# to its default (~/.azure) where the user's real credentials live.
+if ! az account show -o none >/dev/null 2>&1; then
+    if [ -n "${AZURE_CONFIG_DIR:-}" ]; then
+        echo "[preprovision] az not authenticated in AZURE_CONFIG_DIR=$AZURE_CONFIG_DIR — falling back to default config dir"
+        unset AZURE_CONFIG_DIR
+    fi
+    if ! az account show -o none >/dev/null 2>&1; then
+        echo "[preprovision] ERROR: az still not authenticated. Run 'az login' and retry."
+        exit 1
+    fi
+fi
+
 # Read a free-form azd env value (returns empty string if unset).
 azd_flag() {
     azd env get-value "$1" 2>/dev/null | tr -d '[:space:]' || true
 }
+
+# Some tenants (e.g. Microsoft corp) require a serviceManagementReference
+# (a service tree GUID) on every new Entra ID app registration. When set,
+# pass it through to `az ad app create`. Get the right GUID from your
+# tenant admin or service tree, then: azd env set SERVICE_MANAGEMENT_REFERENCE <guid>
+SMR="$(azd_flag SERVICE_MANAGEMENT_REFERENCE)"
+SMR_ARGS=()
+if [ -n "$SMR" ]; then
+    echo "[preprovision] Using serviceManagementReference: $SMR"
+    SMR_ARGS=(--service-management-reference "$SMR")
+fi
 
 # ---------------------------------------------------------------------------
 # 1. Bot — Entra ID app registration for Azure Bot Service (OPT-IN)
@@ -33,6 +60,7 @@ else
     APP_ID=$(az ad app create \
         --display-name "$APP_NAME" \
         --sign-in-audience "AzureADMyOrg" \
+        ${SMR_ARGS[@]+"${SMR_ARGS[@]}"} \
         --query appId -o tsv 2>/dev/null)
 
     if [ -z "$APP_ID" ]; then
@@ -89,6 +117,7 @@ else
         --sign-in-audience "AzureADMyOrg" \
         --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" \
         --enable-id-token-issuance true \
+        ${SMR_ARGS[@]+"${SMR_ARGS[@]}"} \
         --query appId -o tsv 2>/dev/null)
 
     if [ -z "$AUTH_APP_ID" ]; then
