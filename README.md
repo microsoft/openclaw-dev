@@ -11,7 +11,7 @@ name: openclaw-dev
 description: Deploy OpenClaw with Azure OpenAI using one CLI command. Chat in the browser by default; optionally add Microsoft Teams to use it from your phone.
 ---
 -->
-# 🦞 openclaw-dev
+# 🦞 openclaw-dev on Azure
 
 A small dev tool that deploys [OpenClaw](https://github.com/openclaw/openclaw) to an ephemeral cloud sandbox you can chat with from the browser — always on, isolated from your laptop, reachable from any device. Uses Azure OpenAI in Foundry Models for the backend (default `gpt-5-mini`). Microsoft Teams is an optional add-on.
 
