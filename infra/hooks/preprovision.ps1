@@ -13,12 +13,27 @@ function Get-AzdValue($key) {
     return ""
 }
 
+# Helper: read a free-form azd env value (e.g. boolean flags), trimmed.
+function Get-AzdFlag($key) {
+    $raw = azd env get-value $key 2>$null
+    if ($null -eq $raw) { return "" }
+    return ([string]$raw).Trim()
+}
+
 # ---------------------------------------------------------------------------
-# 1. Bot — Entra ID app registration for Azure Bot Service
+# 1. Bot — Entra ID app registration for Azure Bot Service (OPT-IN)
+#    Teams integration is off by default. Enable with:
+#      azd env set ENABLE_TEAMS true
+#    Then re-run `devclaw up`. Existing deployments that already have a
+#    BOT_APP_ID continue to work without setting the flag.
 # ---------------------------------------------------------------------------
 $botAppId = Get-AzdValue "BOT_APP_ID"
+$enableTeams = (Get-AzdFlag "ENABLE_TEAMS").ToLower() -eq "true"
 if ($botAppId) {
     Write-Host "[preprovision] Bot app registration already exists: $botAppId"
+} elseif (-not $enableTeams) {
+    Write-Host "[preprovision] Teams integration not enabled — skipping bot app registration."
+    Write-Host "[preprovision]   To enable Teams later: azd env set ENABLE_TEAMS true && devclaw up"
 } else {
     $appName = "openclaw-bot-$envName"
     Write-Host "[preprovision] Creating bot app registration: $appName"

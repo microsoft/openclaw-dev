@@ -21,6 +21,11 @@ instead of guessing.
   `infra/main.bicep` (`aiModelName`/`aiModelVersion`/`aiModelCapacity`), not env vars.
 - **Region:** `AZURE_LOCATION` must be in the allowed list in `infra/main.bicep`.
   If the chosen region lacks the model SKU, set `AZURE_OPENAI_LOCATION` separately.
+- **Teams is opt-in:** default `devclaw up` is browser-only — no Bot app
+  registration, no Azure Bot, no Teams channel. To enable: `azd env set
+  ENABLE_TEAMS true` then re-run `devclaw up`, or just run `devclaw teams` (it
+  prompts to enable and re-provisions). Don't suggest creating bot app
+  registrations by default — they fail on restricted tenants.
 - **Model scope:** today this targets **Azure OpenAI** models only (default
   `gpt-5-mini`). Do not claim Claude or other Foundry Models work today — they are
   "near future" scope.

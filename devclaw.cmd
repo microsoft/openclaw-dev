@@ -156,15 +156,15 @@ exit /b 0
 
 :teams
 echo.
-echo   Microsoft Teams Setup (automated)
-echo   ----------------------------------
+echo   Microsoft Teams Setup (optional add-on)
+echo   ---------------------------------------
 echo.
-echo   Enabling Teams channel on Azure Bot...
 
 REM Get bot name and FQDN from the deployment
 for /f "tokens=*" %%i in ('azd env get-value HOST_FQDN 2^>nul') do set "FQDN=%%i"
 for /f "tokens=*" %%i in ('azd env get-value BOT_APP_ID 2^>nul') do set "BOT_ID=%%i"
 for /f "tokens=*" %%i in ('azd env get-value AZURE_RESOURCE_GROUP 2^>nul') do set "RG=%%i"
+for /f "tokens=*" %%i in ('azd env get-value ENABLE_TEAMS 2^>nul') do set "ENABLE_TEAMS_FLAG=%%i"
 
 REM Fallback: derive RG from env name if AZURE_RESOURCE_GROUP not set
 if "%RG%"=="" (
@@ -172,11 +172,43 @@ if "%RG%"=="" (
     if not "!ENV_NAME!"=="" set "RG=rg-!ENV_NAME!"
 )
 
+REM Teams is opt-in. If no bot exists yet, offer to enable + re-provision.
+if "%BOT_ID%"=="" (
+    echo   Teams is an optional add-on and isn't enabled for this deployment yet.
+    echo   Enabling it will create an Entra ID app registration + Azure Bot
+    echo   resource, then re-provision so the container app picks up the creds.
+    echo.
+    set /p TEAMS_CONFIRM="  Enable Teams now? [y/N]: "
+    if /i not "!TEAMS_CONFIRM!"=="y" (
+        echo   Cancelled.
+        echo.
+        exit /b 0
+    )
+    if /i not "%ENABLE_TEAMS_FLAG%"=="true" (
+        call azd env set ENABLE_TEAMS true
+        echo   ENABLE_TEAMS=true saved to azd env.
+    )
+    echo   Re-provisioning (creates bot app reg + Azure Bot + Teams channel)...
+    echo.
+    call azd provision
+    for /f "tokens=*" %%i in ('azd env get-value BOT_APP_ID 2^>nul') do set "BOT_ID=%%i"
+    if "!BOT_ID!"=="" (
+        echo   Provisioning didn't create a bot app registration.
+        echo   Check the preprovision hook output above for tenant policy errors.
+        exit /b 1
+    )
+    echo.
+    echo   Redeploying app so MSTEAMS_* env vars take effect...
+    call azd deploy
+    echo.
+)
+
 REM Find the bot resource name in the resource group
 for /f "tokens=*" %%i in ('az resource list --resource-group %RG% --resource-type "Microsoft.BotService/botServices" --query "[0].name" -o tsv 2^>nul') do set "BOT_NAME=%%i"
 
 if "%BOT_NAME%"=="" (
-    echo   No Azure Bot found. Run 'devclaw up' first.
+    echo   No Azure Bot found in %RG% even after provisioning.
+    echo   Check 'azd provision' output for errors.
     exit /b 1
 )
 
@@ -224,7 +256,7 @@ echo     devclaw up         Deploy OpenClaw to Azure
 echo     devclaw test       Verify it's working
 echo.
 echo   Channels:
-echo     devclaw teams      Set up Microsoft Teams integration
+echo     devclaw teams      Add Microsoft Teams integration (optional add-on)
 echo.
 echo   Control:
 echo     devclaw start      Start the agent

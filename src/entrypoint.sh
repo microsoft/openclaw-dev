@@ -21,6 +21,15 @@ sed -i "s|\${MSTEAMS_APP_ID}|${MSTEAMS_APP_ID}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_APP_PASSWORD}|${MSTEAMS_APP_PASSWORD}|g" /root/.openclaw/openclaw.json
 sed -i "s|\${MSTEAMS_TENANT_ID}|${MSTEAMS_TENANT_ID}|g" /root/.openclaw/openclaw.json
 
+# Teams is opt-in. When MSTEAMS_APP_ID is empty the deployment was provisioned
+# without a Bot app registration (no `ENABLE_TEAMS=true`), so disable the
+# msteams plugin in the canonical config to avoid noisy Bot Framework auth
+# attempts against empty credentials.
+if [ -z "${MSTEAMS_APP_ID:-}" ]; then
+    echo "[openclaw] MSTEAMS_APP_ID not set — disabling msteams plugin (Teams opt-in)"
+    node -e "const fs=require('fs');const p='/root/.openclaw/openclaw.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));if(c.channels&&c.channels.msteams){c.channels.msteams.enabled=false;}if(c.plugins){c.plugins.allow=(c.plugins.allow||[]).filter(x=>x!=='msteams');if(c.plugins.entries&&c.plugins.entries.msteams){c.plugins.entries.msteams.enabled=false;}}fs.writeFileSync(p,JSON.stringify(c,null,2));"
+fi
+
 # Gateway token for auth (used by both --token flag and SPA auto-connect).
 # Persist across container restarts via /mnt/state so the Control UI in the
 # browser doesn't drift out of sync after every deploy. Precedence:

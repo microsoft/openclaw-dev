@@ -21,6 +21,10 @@ It contains the command map, env-var contract, region list, and error catalog.
   only if the wrapper can't run.
 - **Configure with `azd env set <KEY> <VALUE>`** before `devclaw up`. There is no
   `.env` file. Model/version/capacity live in `infra/main.bicep`, not env vars.
+- **Teams is opt-in.** Default deploy is browser-only (no bot, no Teams). To
+  enable the Teams add-on: `azd env set ENABLE_TEAMS true` then re-run
+  `devclaw up` (or just run `devclaw teams`, which prompts and re-provisions).
+  Don't create bot app registrations by default.
 - **Region** `AZURE_LOCATION` must be in the allowed list in `infra/main.bicep`;
   set `AZURE_OPENAI_LOCATION` separately if that region lacks the model SKU.
 - **Azure OpenAI only today** (default `gpt-5-mini`). Don't claim Claude / other

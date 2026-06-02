@@ -62,7 +62,7 @@ If `devclaw`/`devclaw.cmd` is not executable, call `azd` directly (`azd up`, `az
 | `start` | Scale to 1 replica (resume after stop) | `az containerapp update --min/max-replicas 1` |
 | `stop` | Scale to 0 replicas — **$0**, state preserved on Azure Files | `az containerapp update --min/max-replicas 0` |
 | `restart` | Restart the active revision | `az containerapp revision restart` |
-| `teams` | Enable Teams channel + build sideload zip | `az bot msteams ...` + zip |
+| `teams` | **Opt-in.** Enables Teams (re-provisions + redeploys on first run) and builds the sideload zip | `azd provision` + `azd deploy` + `az bot msteams ...` + zip |
 | `login` | Switch Azure account | `az login` + `azd auth login` |
 | `down` | **DESTRUCTIVE** — delete all resources + Entra app regs | `azd down --purge` + `az ad app delete` |
 
@@ -75,11 +75,13 @@ not `devclaw test`.
 
 - **Azure CLI** (`az`) and **Azure Developer CLI** (`azd`) installed and logged in
   (`az login`, `azd auth login`). `devclaw` checks for both and exits if missing.
-- An Azure subscription and a tenant where the user can create **Entra ID app
-  registrations** (the preprovision hook creates two: a Bot app and an Easy Auth app).
+- An Azure subscription and a tenant where the user can create **one Entra ID app
+  registration** for the Easy Auth login gate. The optional Teams add-on creates a
+  second app registration (the Bot) plus a client secret — some tenants restrict
+  this (see error catalog).
 - Either local **Docker Desktop** running **or** the default `remoteBuild: true` in
   `azure.yaml` (ACR builds the image — no local Docker needed).
-- **PowerShell 7+** (`pwsh`) on Windows only if running `devclaw teams`.
+- **PowerShell 7+** (`pwsh`) on Windows only if running `devclaw teams` (optional Teams add-on).
 
 ---
 
@@ -92,7 +94,8 @@ not `devclaw test`.
 | `AZURE_SUBSCRIPTION_ID` | no | prompted | Set to skip the interactive picker |
 | `AZURE_OPENAI_LOCATION` | no | = `AZURE_LOCATION` | Override when the chosen region lacks the model SKU (e.g. ACA in `eastasia`, OpenAI in `eastus2`) |
 | `USE_EXPRESS_ENV` | no | `false` | ACA Express mode (preview); only in supported regions (East Asia, West Central US) |
-| `BOT_APP_ID` / `BOT_APP_SECRET` / `BOT_TENANT_ID` | auto | — | Created by the preprovision hook; do not set by hand |
+| `ENABLE_TEAMS` | no | unset (Teams disabled) | Set to `true` *before* `devclaw up` (or before `devclaw teams`) to opt into the Microsoft Teams add-on. When unset, the preprovision hook skips bot app creation, Bicep skips the Azure Bot + Teams channel + MSTEAMS_* env vars, and the runtime disables the msteams plugin. |
+| `BOT_APP_ID` / `BOT_APP_SECRET` / `BOT_TENANT_ID` | auto (when `ENABLE_TEAMS=true`) | — | Created by the preprovision hook when the Teams add-on is enabled; do not set by hand unless your tenant blocks `az ad app credential reset` and you're providing a pre-created bot app reg |
 | `EASYAUTH_APP_ID` | auto | — | Created by the preprovision hook |
 | `SERVICE_OPENCLAW_IMAGE_NAME` | auto | — | Populated by azd after first deploy |
 | `AOAI_DEFAULT_API_VERSION` | no | unset | Escape hatch in `src/auth-proxy.mjs`. Only set when targeting a **non-v1** AOAI surface (e.g. `2024-10-21`). When set, the proxy appends `?api-version=<value>` to `/openai/...` requests that don't already have one. Leave unset for the shipped v1 (`/openai/v1/...`) path. |
@@ -130,14 +133,25 @@ azd env set AZURE_OPENAI_LOCATION eastus2
 `devclaw stop` scales to 0 replicas ($0, state preserved on Azure Files);
 `devclaw start` resumes. Don't use `down` for this — `down` deletes everything.
 
-### Connect to Microsoft Teams (phone access)
-1. `devclaw teams` — enables the Teams channel on the Azure Bot and builds
-   `teams/openclaw-teams-app.zip` (regenerated; gitignored). The zip is baked
-   from `teams/manifest.json` (committed source); `teams/package/manifest.json`
-   is the generated copy and is gitignored — only edit the source.
+### Connect to Microsoft Teams (optional add-on — phone access)
+Teams is **off by default**. Enable it with:
+```bash
+azd env set ENABLE_TEAMS true
+devclaw teams      # first run: re-provisions + redeploys, then enables channel + builds zip
+```
+If the user runs `devclaw teams` without setting `ENABLE_TEAMS`, the wrapper
+will prompt to enable it and re-provision in one step.
+
+1. `devclaw teams` — (re-)provisions the bot app reg + Azure Bot when needed,
+   enables the Teams channel, and builds `teams/openclaw-teams-app.zip`
+   (regenerated; gitignored). The zip is baked from `teams/manifest.json`
+   (committed source); `teams/package/manifest.json` is the generated copy and
+   is gitignored — only edit the source.
 2. In Teams: **Apps → Manage your apps → Upload a custom app →** select the zip → **Add** → DM the bot.
 - Requires `pwsh` on Windows. The msteams plugin must be active in `src/openclaw.json`
   (`plugins.allow: ["msteams"]` + `plugins.entries.msteams.enabled: true`) — already shipped.
+  When Teams is disabled the entrypoint disables the plugin at boot so the
+  gateway doesn't try to authenticate with empty Bot Framework credentials.
 - **Legal URLs in the manifest** show up in Teams' *About* dialog ("Created by …",
   *Privacy policy*, *Terms of use*). The shipped `teams/manifest.json` points
   `privacyUrl` and `termsOfUseUrl` at Microsoft's generic statements
@@ -152,8 +166,9 @@ Azure Portal → Entra ID → App registrations → `openclaw-auth-<env>` → En
 applications → set **Assignment required? = Yes** and assign users/groups.
 
 ### Tear everything down (DESTRUCTIVE — confirm first)
-`devclaw down` deletes the resource group, ACA, OpenAI, storage, **and** the two
-Entra app registrations. Always confirm with the user before running it.
+`devclaw down` deletes the resource group, ACA, OpenAI, storage, **and** the
+Entra app registrations that were created (Easy Auth always; Bot only when the
+Teams add-on is enabled). Always confirm with the user before running it.
 
 ---
 
@@ -161,6 +176,9 @@ Entra app registrations. Always confirm with the user before running it.
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `[preprovision] ERROR: Failed to create bot client secret` with `Credential type not allowed as per assigned policy` from `az ad app credential reset` | Restricted tenant policy blocks programmatic client-secret creation. Common on Microsoft corp tenants. | Leave Teams off (don't set `ENABLE_TEAMS=true`) — the browser experience deploys fine. To use Teams anyway, ask the tenant admin to create the bot app registration + secret, then `azd env set BOT_APP_ID <id>`, `azd env set BOT_APP_SECRET <secret>`, `azd env set BOT_TENANT_ID <tenant>`, `azd env set ENABLE_TEAMS true`, then `devclaw teams`. |
+| `[preprovision] ERROR: Failed to create bot app registration` with `serviceManagementReference` required | Restricted tenant requires `serviceManagementReference` on new app registrations. | Same workaround as above — keep Teams off, or pre-create the app reg with the required metadata and supply `BOT_APP_ID`/`BOT_APP_SECRET`/`BOT_TENANT_ID` via `azd env set`. |
+| `devclaw teams` says "Teams is an optional add-on and isn't enabled" | Default since Teams was made opt-in. | Either accept the prompt to enable now (the wrapper sets `ENABLE_TEAMS=true` and re-provisions), or set it ahead of time: `azd env set ENABLE_TEAMS true && devclaw teams`. |
 | Container `Activating` >2 min | Token acquisition retrying | Normal up to ~5 min; `devclaw logs` |
 | `ActivationFailed` | Container crashed | Portal → Container App → Log stream |
 | `Cannot find module '@buape/carbon'` / HTTP 500 on all routes | Cached/broken Docker layer or missing plugin deps | `docker build --no-cache ./src` then `devclaw deploy` |
