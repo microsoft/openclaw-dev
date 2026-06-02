@@ -8,12 +8,12 @@ products:
 - azure
 urlFragment: openclaw-dev
 name: openclaw-dev
-description: Deploy OpenClaw with Azure OpenAI using one CLI command. Talk to the OpenClaw agent from your mobile via Microsoft Teams 
+description: Deploy OpenClaw with Azure OpenAI using one CLI command. Chat in the browser by default; optionally add Microsoft Teams to use it from your phone.
 ---
 -->
 # 🦞 openclaw-dev
 
-A small dev tool that deploys [OpenClaw](https://github.com/openclaw/openclaw) as a hosted assistant you can DM from Microsoft Teams on your phone. Uses Azure OpenAI in Foundry Models for the backend (default `gpt-5-mini`).
+A small dev tool that deploys [OpenClaw](https://github.com/openclaw/openclaw) as a hosted assistant you can talk to in the browser. Uses Azure OpenAI in Foundry Models for the backend (default `gpt-5-mini`). Microsoft Teams is an optional add-on.
 
 Short link: <https://aka.ms/openclaw-dev>
 
@@ -25,16 +25,16 @@ Short link: <https://aka.ms/openclaw-dev>
 
 The idea: OpenClaw is a useful agent runtime, but it runs arbitrary code. This repo deploys it to a disposable cloud sandbox, gated by your Microsoft sign-in, with no model API keys. One command up, one command down.
 
-→ Jump to: [Quick start](#quick-start) · [Use it from Teams](#teams-setup) · [Security](#security) · [Architecture](#architecture) · [Alpha caveats](#alpha) · [Ask Copilot](#need-help-ask-copilot)
+→ Jump to: [Quick start](#quick-start) · [Optional: Microsoft Teams](#teams-setup) · [Security](#security) · [Architecture](#architecture) · [Alpha caveats](#alpha) · [Ask Copilot](#need-help-ask-copilot)
 
 ## Quick start
 
 ### Prerequisites
 
 - [Azure CLI](https://aka.ms/install-azure-cli) + [Azure Developer CLI](https://aka.ms/azd-install)
-- An Azure subscription ([free](https://azure.microsoft.com/free)) and tenant where you can create Entra ID app registrations
+- An Azure subscription ([free](https://azure.microsoft.com/free)) and tenant where you can create one Entra ID app registration (the Easy Auth login gate). A second Bot app registration is only created if you opt into the [Teams add-on](#teams-setup).
 - Either local [Docker Desktop](https://www.docker.com/products/docker-desktop/) running **or** use the default `remoteBuild: true` in [azure.yaml](azure.yaml) (no local Docker needed; ACR builds the image)
-- PowerShell 7+ (`pwsh`) if you're on Windows. Needed by `devclaw teams` to build the Teams sideload zip
+- PowerShell 7+ (`pwsh`) if you're on Windows and plan to use the optional Teams add-on (used to build the Teams sideload zip)
 
 ### Deploy
 
@@ -64,25 +64,46 @@ devclaw logs     # Tail logs until you see `[gateway] starting HTTP server`
 
 After deployment, open the URL from `devclaw status` in your browser. If Entra ID Easy Auth is configured, you'll be prompted to sign in with your Microsoft account. After that the chat UI loads automatically with no further credentials needed.
 
-## Teams Setup
+<a id="teams-setup"></a>
+## Optional: Microsoft Teams add-on
 
-Connect OpenClaw to Microsoft Teams so you can chat with it from your phone.
+Microsoft Teams is **not** set up by default — `devclaw up` only provisions the
+browser experience (Container App + Easy Auth login). The Teams add-on adds a
+second Entra ID app registration (for the bot), an Azure Bot resource, and the
+Teams channel. Keep it off if your tenant blocks bot app registrations or you
+don't need phone access.
 
-### Step 1: Enable Teams and build the app package
+### Enable Teams
 
 ```bash
+# Opt in once, then run devclaw teams. It will re-provision and build the
+# sideload zip in one go.
+azd env set ENABLE_TEAMS true
 devclaw teams
 ```
 
-This automatically:
-- Enables the Microsoft Teams channel on your Azure Bot (created by `devclaw up`)
-- Builds a sideloadable Teams app package (`teams/openclaw-teams-app.zip`)
+`devclaw teams` will, on first run:
+- Re-provision so the preprovision hook creates the bot Entra ID app + Azure Bot
+- Redeploy the container app so the `MSTEAMS_*` env vars take effect
+- Enable the Microsoft Teams channel on the bot
+- Build a sideloadable Teams app package (`teams/openclaw-teams-app.zip`)
 
-### Step 2: Install in Teams
+On subsequent runs it just refreshes the channel + zip.
+
+### Install in Teams
 
 1. Teams → **Apps** → **Manage your apps** → **Upload a custom app**
 2. Select `teams/openclaw-teams-app.zip`
 3. **Add** → DM the bot to test
+
+### Tenant policy considerations
+
+Some corporate tenants block `az ad app credential reset` (the secret-creation
+step) or require a `serviceManagementReference` on new app registrations. If
+the preprovision hook fails when you set `ENABLE_TEAMS=true`, your tenant is
+restricted; leave Teams off and use the browser experience instead, or create
+the bot app registration manually and set `BOT_APP_ID`, `BOT_APP_SECRET`,
+and `BOT_TENANT_ID` via `azd env set` before running `devclaw teams`.
 
 <details>
 <summary>How the Teams integration works (deep dive)</summary>

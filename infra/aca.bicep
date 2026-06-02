@@ -35,6 +35,59 @@ param easyAuthAppId string = ''
 @description('Container image to deploy. azd populates this from SERVICE_OPENCLAW_IMAGE_NAME after the first `azd deploy`; empty on first provision so a placeholder is used.')
 param containerImage string = ''
 
+// Teams integration is opt-in. The preprovision hook only creates the Bot
+// app registration when `azd env set ENABLE_TEAMS true` is set, so an empty
+// botAppId is the canonical "Teams disabled" signal.
+var teamsEnabled = !empty(botAppId)
+
+// Build the container `secrets` array conditionally so we never emit an empty
+// `msteams-app-password` secret value (which ACA rejects) when Teams is off.
+var baseSecrets = [
+  {
+    name: 'acr-password'
+    value: acr.listCredentials().passwords[0].value
+  }
+]
+var teamsSecrets = teamsEnabled ? [
+  {
+    name: 'msteams-app-password'
+    value: botAppSecret
+  }
+] : []
+var containerSecrets = concat(baseSecrets, teamsSecrets)
+
+// Build the container env block conditionally for the same reason — when
+// Teams is disabled, none of the MSTEAMS_* placeholders should be injected.
+var baseEnv = [
+  {
+    name: 'OPENAI_BASE_URL'
+    value: '${openaiEndpoint}openai/v1/'
+  }
+  {
+    name: 'OPENAI_MODEL_DEPLOYMENT'
+    value: openaiDeploymentName
+  }
+  {
+    name: 'AZURE_OPENAI_AUTH'
+    value: 'managed-identity'
+  }
+]
+var teamsEnv = teamsEnabled ? [
+  {
+    name: 'MSTEAMS_APP_ID'
+    value: botAppId
+  }
+  {
+    name: 'MSTEAMS_APP_PASSWORD'
+    secretRef: 'msteams-app-password'
+  }
+  {
+    name: 'MSTEAMS_TENANT_ID'
+    value: botTenantId
+  }
+] : []
+var containerEnv = concat(baseEnv, teamsEnv)
+
 // ---------------------------------------------------------------------------
 // Azure Container Registry
 // ---------------------------------------------------------------------------
@@ -147,16 +200,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   properties: {
     managedEnvironmentId: environment.id
     configuration: {
-      secrets: [
-        {
-          name: 'acr-password'
-          value: acr.listCredentials().passwords[0].value
-        }
-        {
-          name: 'msteams-app-password'
-          value: botAppSecret
-        }
-      ]
+      secrets: containerSecrets
       registries: [
         {
           server: acr.properties.loginServer
@@ -201,32 +245,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               timeoutSeconds: 3
             }
           ]
-          env: [
-            {
-              name: 'OPENAI_BASE_URL'
-              value: '${openaiEndpoint}openai/v1/'
-            }
-            {
-              name: 'OPENAI_MODEL_DEPLOYMENT'
-              value: openaiDeploymentName
-            }
-            {
-              name: 'AZURE_OPENAI_AUTH'
-              value: 'managed-identity'
-            }
-            {
-              name: 'MSTEAMS_APP_ID'
-              value: botAppId
-            }
-            {
-              name: 'MSTEAMS_APP_PASSWORD'
-              secretRef: 'msteams-app-password'
-            }
-            {
-              name: 'MSTEAMS_TENANT_ID'
-              value: botTenantId
-            }
-          ]
+          env: containerEnv
           volumeMounts: useExpressEnv ? [] : [
             {
               volumeName: 'state-volume'
@@ -265,10 +284,11 @@ resource containerAppAuth 'Microsoft.App/containerApps/authConfigs@2024-03-01' =
       unauthenticatedClientAction: 'RedirectToLoginPage'
       redirectToProvider: 'azureactivedirectory'
       // Bot Framework Connector posts to /api/messages with its own JWT.
-      // Easy Auth must NOT intercept this path or Teams will silently fail.
-      excludedPaths: [
+      // When Teams is enabled, Easy Auth must NOT intercept this path or
+      // bot replies silently fail. When Teams is off, no carve-out is added.
+      excludedPaths: teamsEnabled ? [
         '/api/messages'
-      ]
+      ] : []
     }
     identityProviders: {
       azureActiveDirectory: {

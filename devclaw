@@ -244,22 +244,57 @@ deploy)
 
 teams)
     echo ""
-    echo -e "  ${C}Microsoft Teams Setup (automated)${N}"
-    echo -e "  ${C}----------------------------------${N}"
+    echo -e "  ${C}Microsoft Teams Setup (optional add-on)${N}"
+    echo -e "  ${C}---------------------------------------${N}"
     echo ""
 
     get_app
+
+    # Teams is opt-in. If the deployment was provisioned without
+    # `ENABLE_TEAMS=true`, no Bot app registration / Azure Bot resource exists
+    # yet. Set the flag and re-provision before continuing.
+    BOT_APP_ID=$(azd env get-value BOT_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
+    if [ -z "$BOT_APP_ID" ]; then
+        ENABLE_TEAMS_FLAG=$(azd env get-value ENABLE_TEAMS 2>/dev/null | tr -d '[:space:]' || echo "")
+        echo -e "  ${Y}Teams is an optional add-on and isn't enabled for this deployment yet.${N}"
+        echo -e "  ${D}Enabling Teams will create an Entra ID app registration + Azure Bot${N}"
+        echo -e "  ${D}resource, then re-provision so the container app picks up the bot creds.${N}"
+        echo ""
+        read -rp "  Enable Teams now? [y/N]: " CONFIRM
+        if [[ ! "$CONFIRM" =~ ^[Yy] ]]; then
+            echo -e "  ${D}Cancelled.${N}"
+            echo ""
+            exit 0
+        fi
+        if [ "${ENABLE_TEAMS_FLAG,,}" != "true" ]; then
+            azd env set ENABLE_TEAMS true
+            echo -e "  ${G}ENABLE_TEAMS=true saved to azd env.${N}"
+        fi
+        echo -e "  ${C}Re-provisioning (creates bot app reg + Azure Bot + Teams channel)...${N}"
+        echo ""
+        azd provision
+        BOT_APP_ID=$(azd env get-value BOT_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
+        if [ -z "$BOT_APP_ID" ]; then
+            echo -e "  ${R}Provisioning didn't create a bot app registration.${N}"
+            echo -e "  ${D}Check the preprovision hook output above for tenant policy errors.${N}"
+            exit 1
+        fi
+        echo ""
+        echo -e "  ${C}Redeploying app so MSTEAMS_* env vars take effect...${N}"
+        azd deploy
+        echo ""
+    fi
 
     # Get bot resource name from resource group
     BOT_NAME=$(az resource list --resource-group "$RG" \
         --resource-type "Microsoft.BotService/botServices" \
         --query "[0].name" -o tsv 2>/dev/null)
-    BOT_APP_ID=$(azd env get-value BOT_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
     FQDN=$(az containerapp show --name "$APP" --resource-group "$RG" \
         --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null)
 
     if [ -z "$BOT_NAME" ]; then
-        echo -e "  ${R}No Azure Bot found. Run 'devclaw up' first.${N}"
+        echo -e "  ${R}No Azure Bot found in $RG even after provisioning.${N}"
+        echo -e "  ${D}Check 'azd provision' output for errors.${N}"
         exit 1
     fi
 
@@ -320,7 +355,7 @@ teams)
     echo "    devclaw test       Verify it's working"
     echo ""
     echo "  Channels:"
-    echo "    devclaw teams      Set up Microsoft Teams integration"
+    echo "    devclaw teams      Add Microsoft Teams integration (optional add-on)"
     echo ""
     echo "  Control:"
     echo "    devclaw start      Start the agent"
