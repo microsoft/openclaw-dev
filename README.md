@@ -13,7 +13,9 @@ description: Deploy OpenClaw with Azure OpenAI using one CLI command. Chat in th
 -->
 # 🦞 openclaw-dev
 
-A small dev tool that deploys [OpenClaw](https://github.com/openclaw/openclaw) as a hosted assistant you can talk to in the browser. Uses Azure OpenAI in Foundry Models for the backend (default `gpt-5-mini`). Microsoft Teams is an optional add-on.
+A small dev tool that deploys [OpenClaw](https://github.com/openclaw/openclaw) to an ephemeral cloud sandbox you can chat with from the browser — always on, isolated from your laptop, reachable from any device. Uses Azure OpenAI in Foundry Models for the backend (default `gpt-5-mini`). Microsoft Teams is an optional add-on.
+
+> **Just want OpenClaw on your Windows machine?** Use [Microsoft Execution Containers (MXC)](https://github.com/microsoft/mxc) — a policy-driven runtime that contains the OpenClaw node + gateway on Windows, [announced at Build 2026](https://blogs.windows.com/windowsdeveloper/2026/06/02/build-2026-furthering-windows-as-the-trusted-platform-for-development/). This repo is for the **cloud** path: when you want an always-on, multi-device, throwaway sandbox instead.
 
 Short link: <https://aka.ms/openclaw-dev>
 
@@ -23,7 +25,7 @@ Short link: <https://aka.ms/openclaw-dev>
 
 ![openclaw architecture](docs/architecture.svg)
 
-The idea: OpenClaw is a useful agent runtime, but it runs arbitrary code. This repo deploys it to a disposable cloud sandbox, gated by your Microsoft sign-in, with no model API keys. One command up, one command down.
+The idea: an ephemeral cloud sandbox for OpenClaw — gated by your Microsoft sign-in, calling the model with no API keys, always reachable from your phone, and rebuildable in 6 minutes. Local execution on Windows is already covered by [MXC](https://github.com/microsoft/mxc); this template is for when you want the cloud shape.
 
 → Jump to: [Quick start](#quick-start) · [Optional: Microsoft Teams](#teams-setup) · [Security](#security) · [Architecture](#architecture) · [Alpha caveats](#alpha) · [Ask Copilot](#need-help-ask-copilot)
 
@@ -155,23 +157,28 @@ If you ever see startup logs like `[gateway] http server listening (N plugins: �
 
 ## Why
 
-The whole point of this template is the safety story. Four things, in plain words:
+There are now two safe ways to run OpenClaw: on your Windows machine with **[Microsoft Execution Containers (MXC)](https://github.com/microsoft/mxc)**, or in an ephemeral cloud sandbox like this template. They're complementary, not competing — pick the shape that matches what you're trying to do.
 
+Pick **this template** when you want:
+
+- 🌐 **Always on, reachable from anywhere.** Phone, tablet, a teammate's laptop — anything with a browser and your Microsoft sign-in. Works from Teams too.
+- 🧪 **Full isolation from your machine.** Runtime, skills, and state live in a separate Azure subscription with no path back to your laptop, your credentials, or your local network. Useful when you're poking at untrusted skills or want a clean blast radius.
 - 🔒 **Only people you let in can chat with it.** Microsoft sign-in via Entra ID, scoped to your tenant.
 - 🗝️ **No model API keys.** A managed identity calls the model. Local auth is disabled at the model account, so model keys don't exist.
-- 🧪 **Runs in a throwaway cloud sandbox, not on your laptop.** A bad prompt or a malicious skill can't reach your laptop's credentials.
-- ♻️ **Wipe and rebuild in about 6 minutes.** `devclaw down && devclaw up` gives you a clean slate.
+- ♻️ **Wipe and rebuild in ~6 minutes.** `devclaw down && devclaw up` gives you a clean slate.
+- 💤 **Pause to $0.** `devclaw stop` scales to zero replicas; state is kept.
 
-OpenClaw runs arbitrary code and can be deceived by prompt injection. **Don't run it on your work machine.** This template gives you an isolated, ephemeral container instead:
+Pick **[MXC](https://github.com/microsoft/mxc)** when you want OpenClaw running locally on Windows under policy-driven OS-enforced containment ([announced at Build 2026](https://blogs.windows.com/windowsdeveloper/2026/06/02/build-2026-furthering-windows-as-the-trusted-platform-for-development/) — node + gateway run contained, with a companion Windows app for setup). It's the right pick for fully on-device work and zero-cloud-cost iteration.
 
-| | Your laptop ❌ | This template ✅ |
+| | Windows + MXC | This template (cloud) |
 |---|---|---|
-| **Isolation** | Shares your credentials | Ephemeral container. Bounded blast radius |
-| **Credentials** | API keys on disk | Managed identity. No model API keys |
-| **Nuke & pave** | Reinstall OS | `devclaw down && devclaw up` (~6 min) |
-| **Always on** | Only when open | Always on. `devclaw stop` = $0 |
-| **Teams/mobile** | Only when laptop is on | Always connected |
+| **Where it runs** | On your Windows machine, contained by MXC | Azure Container Apps, in a separate subscription |
+| **Isolation model** | OS-enforced policy sandbox | Whole separate environment |
+| **Reach** | Your machine only | Browser + Teams from any device |
+| **Always on** | Only when your machine is on | 24/7 (or `devclaw stop` = $0) |
+| **Nuke & pave** | Reset the container | `devclaw down && devclaw up` (~6 min) |
 | **Cost** | Your hardware | ~$2-5/day running, $0 stopped |
+| **Model auth** | However you wire it up | Managed identity, no model API keys |
 
 See [Security](#security) for the full defense-in-depth story.
 
