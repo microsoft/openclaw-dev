@@ -28,10 +28,11 @@ azd_flag() {
     azd env get-value "$1" 2>/dev/null | tr -d '[:space:]' || true
 }
 
-# Some tenants (e.g. Microsoft corp) require a serviceManagementReference
-# (a service tree GUID) on every new Entra ID app registration. When set,
-# pass it through to `az ad app create`. Get the right GUID from your
-# tenant admin or service tree, then: azd env set SERVICE_MANAGEMENT_REFERENCE <guid>
+# Some corporate tenants require a serviceManagementReference (an SMR GUID
+# referencing a service catalogue / asset management record) on every new
+# Entra ID app registration. When set, pass it through to `az ad app create`.
+# Get the right GUID from your tenant admin, then:
+#   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>
 SMR="$(azd_flag SERVICE_MANAGEMENT_REFERENCE)"
 SMR_ARGS=()
 if [ -n "$SMR" ]; then

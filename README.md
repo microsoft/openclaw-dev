@@ -108,12 +108,13 @@ and `BOT_TENANT_ID` via `azd env set` before running `devclaw teams`.
 ## Restricted subscriptions / tenants
 
 If your subscription or tenant has Azure Policy assignments that block common
-defaults (Microsoft corp subscriptions are a common example), set these
+defaults (large corporate tenants/subscriptions are a common example), set these
 **before** `devclaw up`:
 
 ```bash
-# Required service-tree GUID on every new app registration (Microsoft corp).
-azd env set SERVICE_MANAGEMENT_REFERENCE <your-service-tree-guid>
+# Required service-management-reference GUID on every new app registration
+# (set by some corporate tenants). Get the right value from your tenant admin.
+azd env set SERVICE_MANAGEMENT_REFERENCE <your-smr-guid>
 
 # Azure Policy blocks shared-key storage. ACA file mounts need shared keys
 # today, so skip the storage account + Azure Files volume mount.
