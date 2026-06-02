@@ -27,7 +27,7 @@ instead of guessing.
   prompts to enable and re-provisions). Don't suggest creating bot app
   registrations by default — they fail on restricted tenants.
 - **Restricted subscriptions/tenants:** before `devclaw up`, set whichever of
-  these apply: `SERVICE_MANAGEMENT_REFERENCE=<service-tree-guid>` (tenants that
+  these apply: `SERVICE_MANAGEMENT_REFERENCE=<smr-guid>` (tenants that
   require it on new app regs), `SKIP_STORAGE=true` (subscriptions whose Azure
   Policy blocks shared-key storage — ACA file mounts need shared keys today;
   gateway token + sessions won't persist across replica restarts). ACR admin

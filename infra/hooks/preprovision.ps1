@@ -37,10 +37,11 @@ function Get-AzdFlag($key) {
     return ([string]$raw).Trim()
 }
 
-# Some tenants (e.g. Microsoft corp) require a serviceManagementReference
-# (a service tree GUID) on every new Entra ID app registration. When set,
-# pass it through to `az ad app create`. Get the right GUID from your
-# tenant admin or service tree, then: azd env set SERVICE_MANAGEMENT_REFERENCE <guid>
+# Some corporate tenants require a serviceManagementReference (an SMR GUID
+# referencing a service catalogue / asset management record) on every new
+# Entra ID app registration. When set, pass it through to `az ad app create`.
+# Get the right GUID from your tenant admin, then:
+#   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>
 $smr = Get-AzdFlag "SERVICE_MANAGEMENT_REFERENCE"
 $smrArgs = @()
 if ($smr) {
