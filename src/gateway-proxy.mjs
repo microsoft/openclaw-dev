@@ -54,13 +54,38 @@ function onProxyError(label) {
 gatewayProxy.on("error", onProxyError("gateway"));
 msteamsProxy.on("error", onProxyError("msteams"));
 
+function requestPath(url) {
+    if (!url) return "";
+    try {
+        return new URL(url, "http://gateway-proxy.local").pathname;
+    } catch {
+        return "";
+    }
+}
+
 function isBotFrameworkPath(url) {
-    if (!url) return false;
-    return url === "/api/messages" || url.startsWith("/api/messages?") || url.startsWith("/api/messages/");
+    return requestPath(url) === "/api/messages";
+}
+
+function rejectUpgrade(socket) {
+    try {
+        if (socket.writable) {
+            socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+        } else {
+            socket.destroy();
+        }
+    } catch {
+        try { socket.destroy(); } catch { /* already closed */ }
+    }
 }
 
 const server = http.createServer((req, res) => {
     if (isBotFrameworkPath(req.url)) {
+        if (req.method !== "POST") {
+            res.writeHead(405, { "Allow": "POST", "Content-Type": "text/plain" });
+            res.end("Method Not Allowed");
+            return;
+        }
         msteamsProxy.web(req, res);
     } else {
         gatewayProxy.web(req, res);
@@ -68,7 +93,12 @@ const server = http.createServer((req, res) => {
 });
 
 server.on("upgrade", (req, socket, head) => {
-    // Bot Framework only uses HTTPS POSTs, no upgrades. All WS upgrades go to the gateway.
+    // Bot Framework webhook delivery is HTTPS POST-only.
+    if (isBotFrameworkPath(req.url)) {
+        rejectUpgrade(socket);
+        return;
+    }
+    // All other WS upgrades go to the gateway, which enforces its own token check.
     gatewayProxy.ws(req, socket, head);
 });
 
