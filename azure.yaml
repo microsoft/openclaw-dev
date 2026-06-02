@@ -20,6 +20,14 @@ hooks:
       shell: sh
       run: ./infra/hooks/postprovision.sh
     continueOnError: true
+  postdeploy:
+    windows:
+      shell: pwsh
+      run: ./infra/hooks/postdeploy.ps1
+    posix:
+      shell: sh
+      run: ./infra/hooks/postdeploy.sh
+    continueOnError: true
 
 services:
   openclaw:

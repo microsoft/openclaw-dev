@@ -26,6 +26,9 @@
     "useExpressEnv": {
       "value": "${USE_EXPRESS_ENV=false}"
     },
+    "skipStorage": {
+      "value": "${SKIP_STORAGE=false}"
+    },
     "openaiLocation": {
       "value": "${AZURE_OPENAI_LOCATION=}"
     }
