@@ -75,8 +75,8 @@ module openai 'resources.bicep' = {
     resourceToken: resourceToken
     environmentName: environmentName
     deployAiModel: true
-    aiModelName: 'gpt-5-mini'
-    aiModelVersion: '2025-08-07'
+    aiModelName: 'gpt-5.4-mini'
+    aiModelVersion: '2026-03-17'
     aiModelCapacity: 10
   }
 }
