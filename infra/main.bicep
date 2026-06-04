@@ -77,7 +77,7 @@ module openai 'resources.bicep' = {
     deployAiModel: true
     aiModelName: 'gpt-5.4-mini'
     aiModelVersion: '2026-03-17'
-    aiModelCapacity: 10
+    aiModelCapacity: 50
   }
 }
 
