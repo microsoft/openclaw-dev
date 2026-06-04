@@ -20,6 +20,14 @@ hooks:
       shell: sh
       run: ./infra/hooks/postprovision.sh
     continueOnError: true
+  predeploy:
+    windows:
+      shell: pwsh
+      run: ./infra/hooks/predeploy.ps1
+    posix:
+      shell: sh
+      run: ./infra/hooks/predeploy.sh
+    continueOnError: true
   postdeploy:
     windows:
       shell: pwsh
