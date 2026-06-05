@@ -35,6 +35,30 @@ azd_flag() {
 #   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>
 SMR="$(azd_flag SERVICE_MANAGEMENT_REFERENCE)"
 SMR_ARGS=()
+if [ -z "$SMR" ]; then
+    # Auto-detect: look for an SMR on the user's existing app registrations
+    echo "[preprovision] SERVICE_MANAGEMENT_REFERENCE not set — checking existing app registrations..."
+    DETECTED_SMR=$(az ad app list --show-mine --query "[?serviceManagementReference != null].serviceManagementReference | [0]" -o tsv 2>/dev/null || echo "")
+    if [[ "$DETECTED_SMR" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+        echo "[preprovision] Detected SMR from your existing apps: $DETECTED_SMR"
+        echo "[preprovision] Press Enter to use this value, or type a different GUID:"
+        read -r USER_INPUT
+        if [[ "$USER_INPUT" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            SMR="$USER_INPUT"
+        else
+            SMR="$DETECTED_SMR"
+        fi
+        azd env set SERVICE_MANAGEMENT_REFERENCE "$SMR"
+        echo "[preprovision] Saved SERVICE_MANAGEMENT_REFERENCE=$SMR"
+    else
+        echo "[preprovision] No SMR found on your existing apps."
+        echo "[preprovision] ERROR: Your tenant may require a SERVICE_MANAGEMENT_REFERENCE to create app registrations."
+        echo "[preprovision]   Get it from your tenant admin, then run:"
+        echo "[preprovision]     azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
+        echo "[preprovision]     devclaw up"
+        exit 1
+    fi
+fi
 if [ -n "$SMR" ]; then
     echo "[preprovision] Using serviceManagementReference: $SMR"
     SMR_ARGS=(--service-management-reference "$SMR")
