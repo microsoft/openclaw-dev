@@ -2,6 +2,17 @@
 # with the actual host FQDN (only known after Bicep provisioning).
 $ErrorActionPreference = "Stop"
 
+# Ensure az CLI is authenticated (same fix as preprovision)
+& az account show -o none 2>$null
+if ($LASTEXITCODE -ne 0 -and $env:AZURE_CONFIG_DIR) {
+    Remove-Item Env:AZURE_CONFIG_DIR -ErrorAction SilentlyContinue
+    & az account show -o none 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[postprovision] WARNING: az not authenticated — skipping redirect URI update"
+        exit 0
+    }
+}
+
 $authAppId = (azd env get-value EASYAUTH_APP_ID 2>$null) -replace '\s+ERROR:.*','' | Where-Object { $_ -match '^[0-9a-f-]+$' }
 if (-not $authAppId) {
     Write-Host "[postprovision] No EASYAUTH_APP_ID — skipping redirect URI update"
