@@ -80,7 +80,23 @@ up)
     echo -e "  ${C}Deploying OpenClaw to Azure...${N}"
     echo -e "  ${D}This provisions Azure OpenAI + Container Apps with managed identity.${N}"
     echo ""
-    azd up
+    if ! azd up; then
+        echo ""
+        echo -e "  ${R}Deployment failed.${N} Common fixes:"
+        echo ""
+        echo -e "  ${Y}• \"RequestDisallowedByPolicy\" on a storage account?${N}"
+        echo -e "    Your subscription blocks shared-key storage. Run:"
+        echo -e "    ${C}  azd env set SKIP_STORAGE true${N}"
+        echo -e "    ${C}  devclaw up${N}"
+        echo -e "    ${D}Trade-off: chat sessions won't persist across restarts.${N}"
+        echo ""
+        echo -e "  ${Y}• \"InvalidTemplateDeployment\" on OpenAI model?${N}"
+        echo -e "    Your region may not have the model SKU. Run:"
+        echo -e "    ${C}  azd env set AZURE_OPENAI_LOCATION eastus2${N}"
+        echo -e "    ${C}  devclaw up${N}"
+        echo ""
+        exit 1
+    fi
     echo ""
     echo -e "  ${G}OpenClaw deployed!${N}"
     echo -e "  ${D}Run 'devclaw test' to verify it's working.${N}"

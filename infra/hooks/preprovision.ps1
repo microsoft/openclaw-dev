@@ -31,8 +31,10 @@ function Get-AzdValue($key) {
 }
 
 # Helper: read a free-form azd env value (e.g. boolean flags), trimmed.
+# Returns empty string if the key doesn't exist (azd writes errors to stdout).
 function Get-AzdFlag($key) {
     $raw = azd env get-value $key 2>$null
+    if ($LASTEXITCODE -ne 0) { return "" }
     if ($null -eq $raw) { return "" }
     return ([string]$raw).Trim()
 }
@@ -49,14 +51,9 @@ if (-not $smr) {
     Write-Host "[preprovision] SERVICE_MANAGEMENT_REFERENCE not set — checking existing app registrations..."
     $detectedSmr = az ad app list --show-mine --query "[?serviceManagementReference != null].serviceManagementReference | [0]" -o tsv 2>$null
     if ($detectedSmr -and $detectedSmr -match '^[0-9a-fA-F-]{36}$') {
-        Write-Host "[preprovision] Detected SMR from your existing apps: $detectedSmr"
-        Write-Host "[preprovision] Press Enter to use this value, or type a different GUID:"
-        $userInput = Read-Host
-        if ($userInput -and $userInput -match '^[0-9a-fA-F-]{36}$') {
-            $smr = $userInput.Trim()
-        } else {
-            $smr = $detectedSmr
-        }
+        Write-Host "[preprovision] Auto-detected SMR from your existing apps: $detectedSmr"
+        Write-Host "[preprovision] Using it. To override, run: azd env set SERVICE_MANAGEMENT_REFERENCE <your-guid>"
+        $smr = $detectedSmr
         azd env set SERVICE_MANAGEMENT_REFERENCE $smr
         Write-Host "[preprovision] Saved SERVICE_MANAGEMENT_REFERENCE=$smr"
     } else {

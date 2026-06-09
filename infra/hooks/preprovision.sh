@@ -40,14 +40,9 @@ if [ -z "$SMR" ]; then
     echo "[preprovision] SERVICE_MANAGEMENT_REFERENCE not set — checking existing app registrations..."
     DETECTED_SMR=$(az ad app list --show-mine --query "[?serviceManagementReference != null].serviceManagementReference | [0]" -o tsv 2>/dev/null || echo "")
     if [[ "$DETECTED_SMR" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-        echo "[preprovision] Detected SMR from your existing apps: $DETECTED_SMR"
-        echo "[preprovision] Press Enter to use this value, or type a different GUID:"
-        read -r USER_INPUT
-        if [[ "$USER_INPUT" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-            SMR="$USER_INPUT"
-        else
-            SMR="$DETECTED_SMR"
-        fi
+        echo "[preprovision] Auto-detected SMR from your existing apps: $DETECTED_SMR"
+        echo "[preprovision] Using it. To override, run: azd env set SERVICE_MANAGEMENT_REFERENCE <your-guid>"
+        SMR="$DETECTED_SMR"
         azd env set SERVICE_MANAGEMENT_REFERENCE "$SMR"
         echo "[preprovision] Saved SERVICE_MANAGEMENT_REFERENCE=$SMR"
     else
