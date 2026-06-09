@@ -12,15 +12,22 @@ Write-Host "[preprovision] Environment: $envName"
 # `az account show`; if it fails, clear AZURE_CONFIG_DIR so the CLI falls back
 # to its default (~/.azure on Linux, %USERPROFILE%\.azure on Windows) where
 # the user's real credentials live.
-& az account show -o none 2>$null
-if ($LASTEXITCODE -ne 0 -and $env:AZURE_CONFIG_DIR) {
+$authOk = $false
+try {
+    & az account show -o none 2>$null
+    if ($LASTEXITCODE -eq 0) { $authOk = $true }
+} catch {}
+if (-not $authOk -and $env:AZURE_CONFIG_DIR) {
     Write-Host "[preprovision] az not authenticated in AZURE_CONFIG_DIR=$env:AZURE_CONFIG_DIR — falling back to default config dir"
     Remove-Item Env:AZURE_CONFIG_DIR -ErrorAction SilentlyContinue
-    & az account show -o none 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[preprovision] ERROR: az still not authenticated. Run 'az login' and retry."
-        exit 1
-    }
+    try {
+        & az account show -o none 2>$null
+        if ($LASTEXITCODE -eq 0) { $authOk = $true }
+    } catch {}
+}
+if (-not $authOk) {
+    Write-Host "[preprovision] ERROR: az still not authenticated. Run 'az login' and retry."
+    exit 1
 }
 
 # Helper: get azd env value, return empty string if key doesn't exist

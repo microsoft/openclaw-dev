@@ -215,17 +215,10 @@ resource envStorage 'Microsoft.App/managedEnvironments/storages@2024-03-01' = if
 // Scale-to-zero: no compute charges when idle
 // ---------------------------------------------------------------------------
 
-// Preserve the image that `azd deploy` pushed on prior runs by reading it
-// from the `containerImage` parameter (sourced from SERVICE_OPENCLAW_IMAGE_NAME
-// in main.parameters.json). On first provision the param is empty, so we fall
-// back to a placeholder; subsequent provisions retain whatever azd last pushed.
-//
-// Placeholder vs. real image is also the deciding factor for the listen port:
-// `mcr.microsoft.com/k8se/quickstart:latest` listens on :80, OpenClaw on :18789.
-// On first provision we ingress to :80 with no probes (so the container is
-// healthy immediately and `azd provision` doesn't time out waiting for a
-// port nobody is listening on). The postdeploy hook flips ingress to :18789
-// after the first real `azd deploy` lands.
+// On first provision containerImage is empty (azd hasn't built yet). We set a
+// placeholder image reference (ACA requires one) but scale to 0 replicas so
+// nothing is actually pulled or started. After `azd deploy` pushes the real
+// image, the postdeploy hook scales the app to 1 replica.
 var placeholderImage = 'mcr.microsoft.com/k8se/quickstart:latest'
 var isPlaceholder = empty(containerImage)
 var effectiveImage = isPlaceholder ? placeholderImage : containerImage
@@ -312,7 +305,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ] : []
       scale: {
-        minReplicas: 1
+        // On first provision (no real image yet), scale to 0 so no replica
+        // starts and no image pull is attempted. azd deploy pushes the real
+        // image, then postdeploy scales up to 1.
+        minReplicas: isPlaceholder ? 0 : 1
         maxReplicas: 1
       }
     }
