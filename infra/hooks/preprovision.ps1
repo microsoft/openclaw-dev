@@ -12,15 +12,22 @@ Write-Host "[preprovision] Environment: $envName"
 # `az account show`; if it fails, clear AZURE_CONFIG_DIR so the CLI falls back
 # to its default (~/.azure on Linux, %USERPROFILE%\.azure on Windows) where
 # the user's real credentials live.
-& az account show -o none 2>$null
-if ($LASTEXITCODE -ne 0 -and $env:AZURE_CONFIG_DIR) {
+$authOk = $false
+try {
+    & az account show -o none 2>$null
+    if ($LASTEXITCODE -eq 0) { $authOk = $true }
+} catch {}
+if (-not $authOk -and $env:AZURE_CONFIG_DIR) {
     Write-Host "[preprovision] az not authenticated in AZURE_CONFIG_DIR=$env:AZURE_CONFIG_DIR — falling back to default config dir"
     Remove-Item Env:AZURE_CONFIG_DIR -ErrorAction SilentlyContinue
-    & az account show -o none 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[preprovision] ERROR: az still not authenticated. Run 'az login' and retry."
-        exit 1
-    }
+    try {
+        & az account show -o none 2>$null
+        if ($LASTEXITCODE -eq 0) { $authOk = $true }
+    } catch {}
+}
+if (-not $authOk) {
+    Write-Host "[preprovision] ERROR: az still not authenticated. Run 'az login' and retry."
+    exit 1
 }
 
 # Helper: get azd env value, return empty string if key doesn't exist
@@ -31,8 +38,10 @@ function Get-AzdValue($key) {
 }
 
 # Helper: read a free-form azd env value (e.g. boolean flags), trimmed.
+# Returns empty string if the key doesn't exist (azd writes errors to stdout).
 function Get-AzdFlag($key) {
     $raw = azd env get-value $key 2>$null
+    if ($LASTEXITCODE -ne 0) { return "" }
     if ($null -eq $raw) { return "" }
     return ([string]$raw).Trim()
 }
@@ -44,6 +53,25 @@ function Get-AzdFlag($key) {
 #   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>
 $smr = Get-AzdFlag "SERVICE_MANAGEMENT_REFERENCE"
 $smrArgs = @()
+if (-not $smr) {
+    # Auto-detect: look for an SMR on the user's existing app registrations
+    Write-Host "[preprovision] SERVICE_MANAGEMENT_REFERENCE not set — checking existing app registrations..."
+    $detectedSmr = az ad app list --show-mine --query "[?serviceManagementReference != null].serviceManagementReference | [0]" -o tsv 2>$null
+    if ($detectedSmr -and $detectedSmr -match '^[0-9a-fA-F-]{36}$') {
+        Write-Host "[preprovision] Auto-detected SMR from your existing apps: $detectedSmr"
+        Write-Host "[preprovision] Using it. To override, run: azd env set SERVICE_MANAGEMENT_REFERENCE <your-guid>"
+        $smr = $detectedSmr
+        azd env set SERVICE_MANAGEMENT_REFERENCE $smr
+        Write-Host "[preprovision] Saved SERVICE_MANAGEMENT_REFERENCE=$smr"
+    } else {
+        Write-Host "[preprovision] No SMR found on your existing apps."
+        Write-Host "[preprovision] ERROR: Your tenant may require a SERVICE_MANAGEMENT_REFERENCE to create app registrations."
+        Write-Host "[preprovision]   Get it from your tenant admin, then run:"
+        Write-Host "[preprovision]     azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
+        Write-Host "[preprovision]     devclaw up"
+        exit 1
+    }
+}
 if ($smr) {
     Write-Host "[preprovision] Using serviceManagementReference: $smr"
     $smrArgs = @("--service-management-reference", $smr)

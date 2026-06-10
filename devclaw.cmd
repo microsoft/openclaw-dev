@@ -45,6 +45,24 @@ exit /b 0
 echo.
 echo   Deploying OpenClaw to Azure...
 call azd up
+if errorlevel 1 (
+    REM Check if the error was a storage policy violation
+    echo.
+    echo   Deployment failed. Common fixes:
+    echo.
+    echo   - "RequestDisallowedByPolicy" on a storage account?
+    echo     Your subscription blocks shared-key storage. Run:
+    echo       azd env set SKIP_STORAGE true
+    echo       devclaw up
+    echo     Trade-off: chat sessions won't persist across restarts.
+    echo.
+    echo   - "InvalidTemplateDeployment" on OpenAI model?
+    echo     Your region may not have the model SKU. Run:
+    echo       azd env set AZURE_OPENAI_LOCATION eastus2
+    echo       devclaw up
+    echo.
+    exit /b 1
+)
 echo.
 echo   OpenClaw deployed! Run 'devclaw test' to verify.
 echo.

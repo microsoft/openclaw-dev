@@ -1,19 +1,55 @@
 # postdeploy.ps1 — Post-deploy fixups that tolerate partial prior deploys:
-#   1. Flip ACA ingress target port from :80 (placeholder) to :18789 (OpenClaw gateway)
-#   2. Update Easy Auth redirect URI if it still points to placeholder
+#   1. Scale container app from 0 to 1 after first deploy (no placeholder pull)
+#   2. Flip ACA ingress target port from :80 (placeholder) to :18789 (OpenClaw gateway)
+#   3. Update Easy Auth redirect URI if it still points to placeholder
 $ErrorActionPreference = "Stop"
+
+# Ensure az CLI is authenticated (azd hooks use a repo-local config dir)
+$authOk = $false
+try {
+    & az account show -o none 2>$null
+    if ($LASTEXITCODE -eq 0) { $authOk = $true }
+} catch {}
+if (-not $authOk -and $env:AZURE_CONFIG_DIR) {
+    Write-Host "[postdeploy] az not authenticated in AZURE_CONFIG_DIR — falling back to default config dir"
+    Remove-Item Env:AZURE_CONFIG_DIR -ErrorAction SilentlyContinue
+    try {
+        & az account show -o none 2>$null
+        if ($LASTEXITCODE -eq 0) { $authOk = $true }
+    } catch {}
+}
+if (-not $authOk) {
+    Write-Host "[postdeploy] WARNING: az not authenticated — skipping post-deploy fixups"
+    exit 0
+}
 
 # Resolve resource group from azd env (don't assume naming convention)
 $rg = (azd env get-value AZURE_RESOURCE_GROUP 2>$null)
 if (-not $rg) { $rg = "rg-$env:AZURE_ENV_NAME" }
 
-$appName = az containerapp list -g $rg --query "[?tags.""azd-service-name""=='openclaw'].name | [0]" -o tsv 2>$null
+$appName = az containerapp list -g $rg --query "[?tags.\`"azd-service-name\`"=='openclaw'].name | [0]" -o tsv 2>$null
+if (-not $appName) {
+    # Fallback: try without tag filter
+    $appName = az containerapp list -g $rg --query "[0].name" -o tsv 2>$null
+}
 if (-not $appName) {
     Write-Host "[postdeploy] No openclaw container app found in $rg — skipping"
     exit 0
 }
 
-# --- Fix 1: Ingress port ---
+# --- Fix 1: Ensure container app is scaled up ---
+# On first deploy, Bicep creates the app at scale 0 (no placeholder image pull).
+# After the real image is deployed, scale to 1 so the app actually starts.
+$currentMin = az containerapp show -g $rg -n $appName --query "properties.template.scale.minReplicas" -o tsv 2>$null
+if ($currentMin -eq "0") {
+    Write-Host "[postdeploy] Scaling container app from 0 to 1 replica..."
+    az containerapp update -g $rg -n $appName --min-replicas 1 --max-replicas 1 -o none 2>$null
+    Write-Host "[postdeploy] Container app scaled up."
+} else {
+    Write-Host "[postdeploy] Container app already scaled ($currentMin replicas)"
+}
+
+# --- Fix 2: Ingress port ---
 $currentPort = az containerapp ingress show -g $rg -n $appName --query targetPort -o tsv 2>$null
 if ($currentPort -eq "18789") {
     Write-Host "[postdeploy] Ingress already targets :18789 — nothing to do"

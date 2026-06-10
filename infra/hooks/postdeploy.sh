@@ -1,9 +1,21 @@
 #!/bin/bash
 # postdeploy.sh — Post-deploy fixups that tolerate partial prior deploys:
-#   1. Flip ACA ingress target port from :80 (placeholder) to :18789 (OpenClaw gateway)
-#   2. Update Easy Auth redirect URI if it still points to placeholder
-#   3. Persist AZURE_CONTAINER_REGISTRY_ENDPOINT if missing from azd env
+#   1. Scale container app from 0 to 1 after first deploy (no placeholder pull)
+#   2. Flip ACA ingress target port from :80 (placeholder) to :18789 (OpenClaw gateway)
+#   3. Update Easy Auth redirect URI if it still points to placeholder
+#   4. Persist AZURE_CONTAINER_REGISTRY_ENDPOINT if missing from azd env
 set -euo pipefail
+
+# Ensure az CLI is authenticated (azd hooks use a repo-local config dir)
+if ! az account show -o none >/dev/null 2>&1; then
+    if [ -n "${AZURE_CONFIG_DIR:-}" ]; then
+        unset AZURE_CONFIG_DIR
+    fi
+    if ! az account show -o none >/dev/null 2>&1; then
+        echo "[postdeploy] WARNING: az not authenticated — skipping post-deploy fixups"
+        exit 0
+    fi
+fi
 
 # Resolve resource group from azd env (don't assume naming convention)
 RG=$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null || echo "")
@@ -15,7 +27,19 @@ if [ -z "$APP_NAME" ]; then
     exit 0
 fi
 
-# --- Fix 1: Ingress port ---
+# --- Fix 1: Ensure container app is scaled up ---
+# On first deploy, Bicep creates the app at scale 0 (no placeholder image pull).
+# After the real image is deployed, scale to 1 so the app actually starts.
+CURRENT_MIN=$(az containerapp show -g "$RG" -n "$APP_NAME" --query "properties.template.scale.minReplicas" -o tsv 2>/dev/null || echo "")
+if [ "$CURRENT_MIN" = "0" ]; then
+    echo "[postdeploy] Scaling container app from 0 to 1 replica..."
+    az containerapp update -g "$RG" -n "$APP_NAME" --min-replicas 1 --max-replicas 1 -o none 2>/dev/null
+    echo "[postdeploy] Container app scaled up."
+else
+    echo "[postdeploy] Container app already scaled ($CURRENT_MIN replicas)"
+fi
+
+# --- Fix 2: Ingress port ---
 CURRENT_PORT=$(az containerapp ingress show -g "$RG" -n "$APP_NAME" --query targetPort -o tsv 2>/dev/null || echo "")
 if [ "$CURRENT_PORT" = "18789" ]; then
     echo "[postdeploy] Ingress already targets :18789 — nothing to do"

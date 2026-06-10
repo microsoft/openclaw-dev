@@ -3,6 +3,17 @@
 # with the actual host FQDN (only known after Bicep provisioning).
 set -euo pipefail
 
+# Ensure az CLI is authenticated (same fix as preprovision)
+if ! az account show -o none >/dev/null 2>&1; then
+    if [ -n "${AZURE_CONFIG_DIR:-}" ]; then
+        unset AZURE_CONFIG_DIR
+    fi
+    if ! az account show -o none >/dev/null 2>&1; then
+        echo "[postprovision] WARNING: az not authenticated — skipping redirect URI update"
+        exit 0
+    fi
+fi
+
 AUTH_APP_ID=$(azd env get-value EASYAUTH_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
 if [ -z "$AUTH_APP_ID" ]; then
     echo "[postprovision] No EASYAUTH_APP_ID — skipping redirect URI update"

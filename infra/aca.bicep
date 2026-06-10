@@ -96,7 +96,8 @@ var containerEnv = concat(baseEnv, teamsEnv)
 
 // ---------------------------------------------------------------------------
 // Azure Container Registry — admin disabled (common Azure Policy), pulled via
-// the container app's system-assigned managed identity + AcrPull role below.
+// a user-assigned managed identity + AcrPull role assigned BEFORE the
+// container app is created (eliminates the RBAC propagation race condition).
 // ---------------------------------------------------------------------------
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: 'acr${resourceToken}'
@@ -104,6 +105,26 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   sku: { name: 'Basic' }
   properties: { adminUserEnabled: false }
   tags: { 'azd-env-name': environmentName }
+}
+
+// User-assigned MI for ACR pull — created before the container app so the
+// AcrPull role can propagate before the first image pull attempt.
+resource acrPullIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-acrpull-${resourceToken}'
+  location: location
+}
+
+resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, acrPullIdentity.id, acr.id, '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+  scope: acr
+  properties: {
+    principalId: acrPullIdentity.properties.principalId
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
+    )
+    principalType: 'ServicePrincipal'
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -194,17 +215,10 @@ resource envStorage 'Microsoft.App/managedEnvironments/storages@2024-03-01' = if
 // Scale-to-zero: no compute charges when idle
 // ---------------------------------------------------------------------------
 
-// Preserve the image that `azd deploy` pushed on prior runs by reading it
-// from the `containerImage` parameter (sourced from SERVICE_OPENCLAW_IMAGE_NAME
-// in main.parameters.json). On first provision the param is empty, so we fall
-// back to a placeholder; subsequent provisions retain whatever azd last pushed.
-//
-// Placeholder vs. real image is also the deciding factor for the listen port:
-// `mcr.microsoft.com/k8se/quickstart:latest` listens on :80, OpenClaw on :18789.
-// On first provision we ingress to :80 with no probes (so the container is
-// healthy immediately and `azd provision` doesn't time out waiting for a
-// port nobody is listening on). The postdeploy hook flips ingress to :18789
-// after the first real `azd deploy` lands.
+// On first provision containerImage is empty (azd hasn't built yet). We set a
+// placeholder image reference (ACA requires one) but scale to 0 replicas so
+// nothing is actually pulled or started. After `azd deploy` pushes the real
+// image, the postdeploy hook scales the app to 1 replica.
 var placeholderImage = 'mcr.microsoft.com/k8se/quickstart:latest'
 var isPlaceholder = empty(containerImage)
 var effectiveImage = isPlaceholder ? placeholderImage : containerImage
@@ -213,7 +227,13 @@ var appPort = isPlaceholder ? 80 : 18789
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'openclaw-${resourceToken}'
   location: location
-  identity: { type: 'SystemAssigned' }
+  identity: {
+    type: 'SystemAssigned, UserAssigned'
+    userAssignedIdentities: {
+      '${acrPullIdentity.id}': {}
+    }
+  }
+  dependsOn: [acrPullRole]
   tags: {
     'azd-env-name': environmentName
     'azd-service-name': 'openclaw'
@@ -225,10 +245,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: acr.properties.loginServer
-          // Pull via the container app's system-assigned MI. AcrPull role
-          // assignment below grants pull access; on first provision the
-          // placeholder image is from MCR so the role isn't yet needed.
-          identity: 'system'
+          // Pull via user-assigned MI that already has AcrPull role assigned.
+          identity: acrPullIdentity.id
         }
       ]
       ingress: {
@@ -287,7 +305,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ] : []
       scale: {
-        minReplicas: 1
+        // On first provision (no real image yet), scale to 0 so no replica
+        // starts and no image pull is attempted. azd deploy pushes the real
+        // image, then postdeploy scales up to 1.
+        minReplicas: isPlaceholder ? 0 : 1
         maxReplicas: 1
       }
     }
@@ -347,22 +368,6 @@ resource cognitiveServicesUserRole 'Microsoft.Authorization/roleAssignments@2022
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
       'a97b65f3-24c7-4388-baec-2e87135dc908' // Cognitive Services User
-    )
-    principalType: 'ServicePrincipal'
-  }
-}
-
-// AcrPull on the registry for the container app's system MI — needed so the
-// container app can pull the OpenClaw image from ACR without admin creds
-// after the first `azd deploy` lands.
-resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, containerApp.id, acr.id, '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-  scope: acr
-  properties: {
-    principalId: containerApp.identity.principalId
-    roleDefinitionId: subscriptionResourceId(
-      'Microsoft.Authorization/roleDefinitions',
-      '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
     )
     principalType: 'ServicePrincipal'
   }
