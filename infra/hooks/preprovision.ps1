@@ -64,12 +64,11 @@ if (-not $smr) {
         azd env set SERVICE_MANAGEMENT_REFERENCE $smr
         Write-Host "[preprovision] Saved SERVICE_MANAGEMENT_REFERENCE=$smr"
     } else {
-        Write-Host "[preprovision] No SMR found on your existing apps."
-        Write-Host "[preprovision] ERROR: Your tenant may require a SERVICE_MANAGEMENT_REFERENCE to create app registrations."
-        Write-Host "[preprovision]   Get it from your tenant admin, then run:"
+        Write-Host "[preprovision] No SMR found on your existing apps — proceeding without one."
+        Write-Host "[preprovision]   If app creation fails with 'ServiceManagementReference field is required',"
+        Write-Host "[preprovision]   get the GUID from your tenant admin and run:"
         Write-Host "[preprovision]     azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
         Write-Host "[preprovision]     devclaw up"
-        exit 1
     }
 }
 if ($smr) {
@@ -95,9 +94,17 @@ if ($botAppId) {
     $appName = "openclaw-bot-$envName"
     Write-Host "[preprovision] Creating bot app registration: $appName"
 
-    $botAppId = az ad app create --display-name $appName --sign-in-audience "AzureADMyOrg" @smrArgs --query appId -o tsv 2>$null
+    $botOutput = az ad app create --display-name $appName --sign-in-audience "AzureADMyOrg" @smrArgs --query appId -o tsv 2>&1
+    $botAppId = $botOutput | Where-Object { $_ -match '^[0-9a-f-]{36}$' } | Select-Object -First 1
     if (-not $botAppId) {
         Write-Host "[preprovision] ERROR: Failed to create bot app registration"
+        if ("$botOutput" -match "(?i)serviceManagementReference") {
+            Write-Host "[preprovision]   Cause: Your tenant requires a serviceManagementReference on app registrations."
+            Write-Host "[preprovision]   Fix:   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
+            Write-Host "[preprovision]          (get the GUID from your tenant admin)"
+        } else {
+            Write-Host "[preprovision]   Output: $botOutput"
+        }
         exit 1
     }
 
@@ -136,22 +143,31 @@ if ($easyAuthAppId) {
     $authAppName = "openclaw-auth-$envName"
     Write-Host "[preprovision] Creating Easy Auth app registration: $authAppName"
 
-    $easyAuthAppId = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
+    $authOutput = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
         --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" `
         --enable-id-token-issuance true `
         @smrArgs `
-        --query appId -o tsv 2>$null
+        --query appId -o tsv 2>&1
+    $easyAuthAppId = $authOutput | Where-Object { $_ -match '^[0-9a-f-]{36}$' } | Select-Object -First 1
     if (-not $easyAuthAppId) {
         Write-Host "[preprovision] Retrying Easy Auth app creation after 5s..."
         Start-Sleep -Seconds 5
-        $easyAuthAppId = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
+        $authOutput = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
             --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" `
             --enable-id-token-issuance true `
             @smrArgs `
-            --query appId -o tsv 2>$null
+            --query appId -o tsv 2>&1
+        $easyAuthAppId = $authOutput | Where-Object { $_ -match '^[0-9a-f-]{36}$' } | Select-Object -First 1
     }
     if (-not $easyAuthAppId) {
         Write-Host "[preprovision] ERROR: Failed to create Easy Auth app registration"
+        if ("$authOutput" -match "(?i)serviceManagementReference") {
+            Write-Host "[preprovision]   Cause: Your tenant requires a serviceManagementReference on app registrations."
+            Write-Host "[preprovision]   Fix:   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
+            Write-Host "[preprovision]          (get the GUID from your tenant admin)"
+        } else {
+            Write-Host "[preprovision]   Output: $authOutput"
+        }
         exit 1
     }
 

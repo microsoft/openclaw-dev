@@ -46,12 +46,11 @@ if [ -z "$SMR" ]; then
         azd env set SERVICE_MANAGEMENT_REFERENCE "$SMR"
         echo "[preprovision] Saved SERVICE_MANAGEMENT_REFERENCE=$SMR"
     else
-        echo "[preprovision] No SMR found on your existing apps."
-        echo "[preprovision] ERROR: Your tenant may require a SERVICE_MANAGEMENT_REFERENCE to create app registrations."
-        echo "[preprovision]   Get it from your tenant admin, then run:"
+        echo "[preprovision] No SMR found on your existing apps — proceeding without one."
+        echo "[preprovision]   If app creation fails with 'ServiceManagementReference field is required',"
+        echo "[preprovision]   get the GUID from your tenant admin and run:"
         echo "[preprovision]     azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
         echo "[preprovision]     devclaw up"
-        exit 1
     fi
 fi
 if [ -n "$SMR" ]; then
@@ -77,14 +76,20 @@ else
     APP_NAME="openclaw-bot-${ENV_NAME}"
     echo "[preprovision] Creating app registration: $APP_NAME"
 
-    APP_ID=$(az ad app create \
+    APP_ERR=$(az ad app create \
         --display-name "$APP_NAME" \
         --sign-in-audience "AzureADMyOrg" \
         ${SMR_ARGS[@]+"${SMR_ARGS[@]}"} \
-        --query appId -o tsv 2>/dev/null)
+        --query appId -o tsv 2>&1)
+    APP_ID=$(echo "$APP_ERR" | grep -oP '^[0-9a-f-]{36}$' | head -1)
 
     if [ -z "$APP_ID" ]; then
         echo "[preprovision] ERROR: Failed to create bot app registration"
+        if echo "$APP_ERR" | grep -qi "serviceManagementReference"; then
+            echo "[preprovision]   Cause: Your tenant requires a serviceManagementReference on app registrations."
+            echo "[preprovision]   Fix:   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
+            echo "[preprovision]          (get the GUID from your tenant admin)"
+        fi
         exit 1
     fi
 
@@ -132,16 +137,24 @@ else
     echo "[preprovision] Creating Easy Auth app registration: $AUTH_APP_NAME"
 
     # Create with placeholder redirect URI (updated after Bicep creates the container app)
-    AUTH_APP_ID=$(az ad app create \
+    AUTH_OUTPUT=$(az ad app create \
         --display-name "$AUTH_APP_NAME" \
         --sign-in-audience "AzureADMyOrg" \
         --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" \
         --enable-id-token-issuance true \
         ${SMR_ARGS[@]+"${SMR_ARGS[@]}"} \
-        --query appId -o tsv 2>/dev/null)
+        --query appId -o tsv 2>&1)
+    AUTH_APP_ID=$(echo "$AUTH_OUTPUT" | grep -oP '^[0-9a-f-]{36}$' | head -1)
 
     if [ -z "$AUTH_APP_ID" ]; then
         echo "[preprovision] ERROR: Failed to create Easy Auth app registration"
+        if echo "$AUTH_OUTPUT" | grep -qi "serviceManagementReference"; then
+            echo "[preprovision]   Cause: Your tenant requires a serviceManagementReference on app registrations."
+            echo "[preprovision]   Fix:   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
+            echo "[preprovision]          (get the GUID from your tenant admin)"
+        else
+            echo "[preprovision]   Output: $AUTH_OUTPUT"
+        fi
         exit 1
     fi
 
