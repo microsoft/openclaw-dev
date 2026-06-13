@@ -60,6 +60,8 @@ devclaw status   # Container state, FQDN, RG
 devclaw logs     # Tail logs until you see `[gateway] starting HTTP server`
 ```
 
+If `devclaw` asks you to authenticate Azure CLI, run `devclaw login` for this repo profile and retry. This is typically needed for runtime operations (`logs`, `start`, `stop`, `restart`) and occasionally for live-state lookup.
+
 `devclaw test` only prints a hint that points you at the in-container console. It does not exercise the model end-to-end. The fastest real smoke test is the WebChat UI below.
 
 ### Open the WebChat UI

@@ -44,8 +44,20 @@ check_prereqs() {
 
 get_app() {
     RG=$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null || true)
+    SUB=$(azd env get-value AZURE_SUBSCRIPTION_ID 2>/dev/null || true)
     if [ -z "$RG" ]; then
         echo -e "  ${R}No deployment found. Run 'devclaw up' first.${N}"
+        exit 1
+    fi
+    if ! az account show >/dev/null 2>&1; then
+        echo -e "  ${Y}Azure CLI is not logged in for this workspace profile.${N}"
+        echo -e "  ${D}Run 'devclaw login' and retry.${N}"
+        echo -e "  ${D}Profile: ${AZURE_CONFIG_DIR}${N}"
+        exit 1
+    fi
+    if [ -n "$SUB" ] && ! az account set --subscription "$SUB" >/dev/null 2>&1; then
+        echo -e "  ${Y}Azure CLI cannot access subscription ${SUB}.${N}"
+        echo -e "  ${D}Run 'devclaw login' with an account that can access this subscription.${N}"
         exit 1
     fi
     APP=$(az containerapp list --resource-group "$RG" --query "[0].name" -o tsv 2>/dev/null || true)
@@ -203,15 +215,53 @@ test)
     ;;
 
 status)
-    get_app
+    RG=$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null || true)
+    SUB=$(azd env get-value AZURE_SUBSCRIPTION_ID 2>/dev/null || true)
+    if [ -z "$RG" ]; then
+        echo -e "  ${R}No deployment found. Run 'devclaw up' first.${N}"
+        exit 1
+    fi
+
+    APP=""
+    SHOW_JSON=$(azd show -o json 2>/dev/null || true)
+    if [ -n "$SHOW_JSON" ]; then
+        RESOURCE_ID=$(printf '%s\n' "$SHOW_JSON" | grep -Eo '/subscriptions/[^\"]+/resourceGroups/[^\"]+/providers/Microsoft\.App/containerApps/[^\"]+' | head -1 || true)
+        if [ -n "$RESOURCE_ID" ]; then
+            APP="${RESOURCE_ID##*/}"
+        fi
+    fi
+
+    # Fallback if azd show did not include resource IDs yet.
+    if [ -z "$APP" ]; then
+        HOST=$(azd env get-value HOST_FQDN 2>/dev/null || true)
+        if [ -n "$HOST" ]; then
+            APP="${HOST%%.*}"
+        fi
+    fi
+
+    if [ -z "$APP" ]; then
+        echo -e "  ${R}No container app found in $RG.${N}"
+        echo -e "  ${D}Try 'devclaw deploy' or check 'azd show'.${N}"
+        exit 1
+    fi
+
     echo ""
     echo -e "  ${C}devclaw${N}"
     echo -e "  ${C}--------${N}"
 
-    FQDN=$(az containerapp show --name "$APP" --resource-group "$RG" \
-        --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null)
-    STATUS=$(az containerapp revision list --name "$APP" --resource-group "$RG" \
-        --query "[?properties.active].properties.runningState" -o tsv 2>/dev/null | head -1)
+    FQDN=$(azd env get-value HOST_FQDN 2>/dev/null || true)
+    if [ -z "$FQDN" ] && [ -n "$SHOW_JSON" ]; then
+        FQDN=$(printf '%s\n' "$SHOW_JSON" | sed -n 's#.*"ingressUrl"[[:space:]]*:[[:space:]]*"https\{0,1\}://\([^/\"]*\)/\{0,1\}".*#\1#p' | head -1)
+    fi
+
+    STATUS="unknown"
+    if az account show >/dev/null 2>&1; then
+        if [ -z "$SUB" ] || az account set --subscription "$SUB" >/dev/null 2>&1; then
+            STATUS=$(az containerapp revision list --name "$APP" --resource-group "$RG" \
+                --query "[?properties.active].properties.runningState" -o tsv 2>/dev/null | head -1)
+            [ -z "$STATUS" ] && STATUS="unknown"
+        fi
+    fi
 
     SC="$Y"
     [ "$STATUS" = "Running" ] && SC="$G"

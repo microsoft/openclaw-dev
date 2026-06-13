@@ -25,8 +25,27 @@ fi
 
 # Read a free-form azd env value (returns empty string if unset).
 azd_flag() {
-    azd env get-value "$1" 2>/dev/null | tr -d '[:space:]' || true
+    local value
+
+    if ! value="$(azd env get-value "$1" 2>/dev/null)"; then
+        echo ""
+        return 0
+    fi
+
+    value="$(printf '%s' "$value" | tr -d '[:space:]')"
+
+    # `azd env get-value` may print error text when a key is missing.
+    case "$value" in
+        ERROR:*|Suggestion:*)
+            echo ""
+            ;;
+        *)
+            echo "$value"
+            ;;
+    esac
 }
+
+GUID_REGEX='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
 
 # Some corporate tenants require a serviceManagementReference (an SMR GUID
 # referencing a service catalogue / asset management record) on every new
@@ -39,7 +58,7 @@ if [ -z "$SMR" ]; then
     # Auto-detect: look for an SMR on the user's existing app registrations
     echo "[preprovision] SERVICE_MANAGEMENT_REFERENCE not set — checking existing app registrations..."
     DETECTED_SMR=$(az ad app list --show-mine --query "[?serviceManagementReference != null].serviceManagementReference | [0]" -o tsv 2>/dev/null || echo "")
-    if [[ "$DETECTED_SMR" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+    if echo "$DETECTED_SMR" | grep -Eq "^$GUID_REGEX$"; then
         echo "[preprovision] Auto-detected SMR from your existing apps: $DETECTED_SMR"
         echo "[preprovision] Using it. To override, run: azd env set SERVICE_MANAGEMENT_REFERENCE <your-guid>"
         SMR="$DETECTED_SMR"
@@ -65,11 +84,12 @@ fi
 #    Then re-run `devclaw up`. Existing deployments that already have a
 #    BOT_APP_ID continue to work without setting the flag.
 # ---------------------------------------------------------------------------
-EXISTING_APP_ID=$(azd env get-value BOT_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
+EXISTING_APP_ID=$(azd_flag BOT_APP_ID | grep -Eo "$GUID_REGEX" || echo "")
 ENABLE_TEAMS_FLAG="$(azd_flag ENABLE_TEAMS)"
+ENABLE_TEAMS_FLAG_LOWER="$(printf '%s' "$ENABLE_TEAMS_FLAG" | tr '[:upper:]' '[:lower:]')"
 if [ -n "$EXISTING_APP_ID" ]; then
     echo "[preprovision] Bot app registration already exists: $EXISTING_APP_ID"
-elif [ "${ENABLE_TEAMS_FLAG,,}" != "true" ]; then
+elif [ "$ENABLE_TEAMS_FLAG_LOWER" != "true" ]; then
     echo "[preprovision] Teams integration not enabled — skipping bot app registration."
     echo "[preprovision]   To enable Teams later: azd env set ENABLE_TEAMS true && devclaw up"
 else
@@ -81,7 +101,7 @@ else
         --sign-in-audience "AzureADMyOrg" \
         ${SMR_ARGS[@]+"${SMR_ARGS[@]}"} \
         --query appId -o tsv 2>&1)
-    APP_ID=$(echo "$APP_ERR" | grep -oP '^[0-9a-f-]{36}$' | head -1)
+    APP_ID=$(echo "$APP_ERR" | grep -Eo "$GUID_REGEX" | head -1)
 
     if [ -z "$APP_ID" ]; then
         echo "[preprovision] ERROR: Failed to create bot app registration"
@@ -129,7 +149,7 @@ fi
 # Easy Auth — Entra ID app registration for ACA built-in authentication
 # Forces Microsoft login before any request reaches the container
 # ---------------------------------------------------------------------------
-EXISTING_AUTH_ID=$(azd env get-value EASYAUTH_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
+EXISTING_AUTH_ID=$(azd_flag EASYAUTH_APP_ID | grep -Eo "$GUID_REGEX" || echo "")
 if [ -n "$EXISTING_AUTH_ID" ]; then
     echo "[preprovision] Easy Auth app registration already exists: $EXISTING_AUTH_ID"
 else
@@ -144,7 +164,7 @@ else
         --enable-id-token-issuance true \
         ${SMR_ARGS[@]+"${SMR_ARGS[@]}"} \
         --query appId -o tsv 2>&1)
-    AUTH_APP_ID=$(echo "$AUTH_OUTPUT" | grep -oP '^[0-9a-f-]{36}$' | head -1)
+    AUTH_APP_ID=$(echo "$AUTH_OUTPUT" | grep -Eo "$GUID_REGEX" | head -1)
 
     if [ -z "$AUTH_APP_ID" ]; then
         echo "[preprovision] ERROR: Failed to create Easy Auth app registration"
