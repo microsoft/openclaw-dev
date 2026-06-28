@@ -21,7 +21,7 @@ optionally reachable from Microsoft Teams.
 @openclaw-on-azure deploy OpenClaw to eastus2 and connect it to Teams
 ```
 
-You follow [`skills/openclaw-on-azure/SKILL.md`](../../skills/openclaw-on-azure/SKILL.md)
+You follow [`skills/openclaw-dev/SKILL.md`](../../skills/openclaw-dev/SKILL.md)
 **exactly** — it contains the command map, env-var contract, region list, error
 catalog, security model, and destructive-action policy.
 
@@ -34,7 +34,7 @@ tooling to satisfy it — never inventing commands, env vars, or regions.
 ## Workflow
 
 ### 1. Understand & check prerequisites
-1. Read the skill: `skills/openclaw-on-azure/SKILL.md`.
+1. Read the skill: `skills/openclaw-dev/SKILL.md`.
 2. Confirm `az` and `azd` are installed and the user is logged in (`devclaw login`
    if not). Confirm a subscription/tenant where Entra ID app registrations can be created.
 3. Identify the requested task and the relevant section of the skill.
@@ -65,7 +65,7 @@ tooling to satisfy it — never inventing commands, env vars, or regions.
 
 - Follow the skill instructions precisely. Don't invent `azd` env vars, regions, or
   CLI flags.
-- **Azure OpenAI only today** (default `gpt-5-mini`); don't claim Claude/other Foundry
+- **Azure OpenAI only today** (default `gpt-5.4-mini`); don't claim Claude/other Foundry
   Models work yet.
 - **Passwordless only** — Managed Identity, `disableLocalAuth: true`. Never add or
   suggest API keys.

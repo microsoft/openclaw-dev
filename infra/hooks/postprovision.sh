@@ -3,6 +3,21 @@
 # with the actual host FQDN (only known after Bicep provisioning).
 set -euo pipefail
 
+# ACA Sandboxes host (USE_SANDBOX=true) is a different backend with no Easy
+# Auth app registration. Delegate the entire data-plane bring-up to sandbox.sh
+# and skip the container-app redirect-URI fixup below.
+USE_SANDBOX=$(azd env get-value USE_SANDBOX 2>/dev/null || echo "")
+if [ "$(printf '%s' "$USE_SANDBOX" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+    exec bash "$(dirname "$0")/sandbox.sh"
+fi
+
+# Execution layer (EXECUTION_MODE=sandbox): build the exec image + disk +
+# snapshot and inject ids into the Gateway (independent of the Easy Auth fixup).
+EXEC_MODE=$(azd env get-value EXECUTION_MODE 2>/dev/null || echo "")
+if [ "$(printf '%s' "$EXEC_MODE" | tr '[:upper:]' '[:lower:]')" = "sandbox" ]; then
+    bash "$(dirname "$0")/execution.sh" || true
+fi
+
 # Ensure az CLI is authenticated (same fix as preprovision)
 if ! az account show -o none >/dev/null 2>&1; then
     if [ -n "${AZURE_CONFIG_DIR:-}" ]; then

@@ -8,11 +8,16 @@
 #        devclaw status    Check agent status
 #        devclaw logs      Stream live logs
 #        devclaw test      Run a quick test message
+#        devclaw clone     (sandbox) Boot another OpenClaw from the existing image
 #        devclaw login     Switch Azure account
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-export AZURE_CONFIG_DIR="$ROOT/.azure"
+# Respect an az config dir already scoped by the environment (e.g. VS Code's
+# .azure-cli); only fall back to the repo-local .azure when nothing is set.
+# Pinning az at a dir with no signed-in account is the #1 cause of false
+# "resource not found" errors in status/teams.
+export AZURE_CONFIG_DIR="${AZURE_CONFIG_DIR:-$ROOT/.azure}"
 
 C='\033[36m'   # cyan
 G='\033[32m'   # green
@@ -67,6 +72,30 @@ get_app() {
     fi
 }
 
+# True when this deployment uses the ACA Sandboxes host (USE_SANDBOX=true)
+# instead of Azure Container Apps.
+is_sandbox() {
+    local v
+    v=$(azd env get-value USE_SANDBOX 2>/dev/null || true)
+    [ "$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]')" = "true" ]
+}
+
+# Resolve sandbox identifiers from the azd env; exits with guidance if missing.
+get_sandbox() {
+    RG=$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null || true)
+    GROUP=$(azd env get-value AZURE_SANDBOX_GROUP_NAME 2>/dev/null || true)
+    SBX=$(azd env get-value AZURE_SANDBOX_ID 2>/dev/null || true)
+    SBX_URL=$(azd env get-value SANDBOX_URL 2>/dev/null || true)
+    if [ -z "$GROUP" ]; then
+        echo -e "  ${R}No sandbox deployment found. Run 'devclaw up' first.${N}"
+        exit 1
+    fi
+    if ! command -v aca >/dev/null 2>&1; then
+        echo -e "  ${Y}aca CLI not found.${N} Install: ${D}https://aka.ms/aca-cli-install${N}"
+        exit 1
+    fi
+}
+
 check_prereqs
 
 case "$COMMAND" in
@@ -89,6 +118,38 @@ login)
 
 up)
     echo ""
+    if is_sandbox; then
+        echo -e "  ${C}Deploying OpenClaw to Azure (ACA Sandboxes host)...${N}"
+        echo -e "  ${D}Provisions Azure OpenAI + a sandbox group with managed identity,${N}"
+        echo -e "  ${D}then builds the image and boots a sandbox via the aca CLI.${N}"
+        echo ""
+        # Sandboxes aren't an azd-native service host, so there's no container
+        # app for `azd deploy` to target — provision only. The postprovision
+        # hook (sandbox.sh) builds the image and boots the sandbox.
+        if ! azd provision; then
+            echo ""
+            echo -e "  ${R}Provisioning failed.${N} Common fixes:"
+            echo ""
+            echo -e "  ${Y}• \"NoRegisteredProviderFound\" / api-version on SandboxGroups?${N}"
+            echo -e "    ACA Sandboxes is Early Access. Ensure it's enabled on your"
+            echo -e "    subscription, or update the api-version literal in"
+            echo -e "    ${C}  infra/sandbox.bicep${N}"
+            echo ""
+            echo -e "  ${Y}• \"InvalidTemplateDeployment\" on OpenAI model?${N}"
+            echo -e "    Your region may not have the model SKU. Run:"
+            echo -e "    ${C}  azd env set AZURE_OPENAI_LOCATION eastus2${N}"
+            echo -e "    ${C}  devclaw up${N}"
+            echo ""
+            exit 1
+        fi
+        echo ""
+        echo -e "  ${G}OpenClaw sandbox deployed!${N}"
+        SBX_URL=$(azd env get-value SANDBOX_URL 2>/dev/null || true)
+        [ -n "$SBX_URL" ] && echo -e "  ${D}URL: ${G}${SBX_URL}${N}"
+        echo -e "  ${D}Run 'devclaw status' to check it.${N}"
+        echo ""
+        exit 0
+    fi
     echo -e "  ${C}Deploying OpenClaw to Azure...${N}"
     echo -e "  ${D}This provisions Azure OpenAI + Container Apps with managed identity.${N}"
     echo ""
@@ -117,6 +178,16 @@ up)
     ;;
 
 start)
+    if is_sandbox; then
+        get_sandbox
+        echo ""
+        echo -e "  ${C}Resuming OpenClaw sandbox...${N}"
+        aca sandbox resume --id "$SBX" >/dev/null 2>&1 || true
+        echo -e "  ${G}Sandbox resumed. State restored in place.${N}"
+        echo -e "  ${D}Run 'devclaw logs' to see output.${N}"
+        echo ""
+        exit 0
+    fi
     get_app
     echo ""
     echo -e "  ${C}Starting OpenClaw...${N}"
@@ -128,6 +199,17 @@ start)
     ;;
 
 stop)
+    if is_sandbox; then
+        get_sandbox
+        echo ""
+        echo -e "  ${C}Suspending OpenClaw sandbox...${N}"
+        echo -e "  ${D}Memory + disk state preserved. Resume in sub-second.${N}"
+        aca sandbox stop --id "$SBX" >/dev/null 2>&1 || true
+        echo -e "  ${G}Sandbox suspended. No compute running.${N}"
+        echo -e "  ${D}Run 'devclaw start' to resume.${N}"
+        echo ""
+        exit 0
+    fi
     get_app
     echo ""
     echo -e "  ${C}Stopping OpenClaw...${N}"
@@ -140,6 +222,16 @@ stop)
     ;;
 
 restart)
+    if is_sandbox; then
+        get_sandbox
+        echo ""
+        echo -e "  ${C}Cycling the OpenClaw sandbox (suspend + resume)...${N}"
+        aca sandbox stop --id "$SBX" >/dev/null 2>&1 || true
+        aca sandbox resume --id "$SBX" >/dev/null 2>&1 || true
+        echo -e "  ${G}Sandbox cycled.${N}"
+        echo ""
+        exit 0
+    fi
     get_app
     echo ""
     echo -e "  ${C}Restarting OpenClaw...${N}"
@@ -156,6 +248,16 @@ restart)
     ;;
 
 logs)
+    if is_sandbox; then
+        get_sandbox
+        echo ""
+        echo -e "  ${C}Opening an interactive shell in the sandbox (exit to return)...${N}"
+        echo -e "  ${D}Inside, inspect the gateway with: openclaw gateway --help${N}"
+        echo ""
+        aca sandbox shell --id "$SBX" || \
+            echo -e "  ${Y}Shell unavailable. Try: aca sandbox exec --id $SBX -c 'openclaw gateway status'${N}"
+        exit 0
+    fi
     get_app
     echo ""
     echo -e "  ${C}Streaming OpenClaw logs...${N}"
@@ -166,11 +268,31 @@ logs)
     ;;
 
 test)
+    if is_sandbox; then
+        get_sandbox
+        echo ""
+        echo -e "  ${C}Testing OpenClaw sandbox...${N}"
+        echo ""
+        STATE=$(aca sandbox get --id "$SBX" -o json 2>/dev/null | grep -oE '"state"[^,]*' | head -1 | sed -E 's/.*:[[:space:]]*"?([A-Za-z]+).*/\1/')
+        if [ "$STATE" = "Running" ]; then
+            echo -e "  ${G}✅ Sandbox is running${N}"
+        elif [ -n "$STATE" ]; then
+            echo -e "  ${Y}Sandbox state: ${STATE}${N} ${D}(suspended sandboxes auto-resume on access)${N}"
+        else
+            echo -e "  ${R}❌ Could not read sandbox state${N}"
+        fi
+        echo -e "  Auth mode: ${C}managed-identity${N}"
+        [ -n "$SBX_URL" ] && echo -e "  URL:       ${C}${SBX_URL}${N}"
+        echo ""
+        echo -e "  ${D}Send a test message from inside the sandbox:${N}"
+        echo -e "  ${D}  aca sandbox exec --id $SBX -c 'openclaw agent -m \"Hello from the cloud!\"'${N}"
+        echo ""
+        exit 0
+    fi
     get_app
     echo ""
     echo -e "  ${C}Testing OpenClaw agent...${N}"
     echo ""
-
     # Check revision status
     STATUS=$(az containerapp revision list --name "$APP" --resource-group "$RG" \
         --query "[?properties.active].properties.runningState" -o tsv 2>/dev/null | head -1)
@@ -215,6 +337,23 @@ test)
     ;;
 
 status)
+    if is_sandbox; then
+        get_sandbox
+        echo ""
+        echo -e "  ${C}devclaw${N}"
+        echo -e "  ${C}--------${N}"
+        STATE=$(aca sandbox get --id "$SBX" -o json 2>/dev/null | grep -oE '"state"[^,]*' | head -1 | sed -E 's/.*:[[:space:]]*"?([A-Za-z]+).*/\1/')
+        SC="$Y"
+        [ "$STATE" = "Running" ] && SC="$G"
+        echo -e "  Host:       ACA Sandboxes"
+        echo -e "  Group:      ${GROUP}"
+        echo -e "  Sandbox:    ${SBX:-none}"
+        echo -e "  Status:     ${SC}${STATE:-unknown}${N}"
+        echo -e "  URL:        ${G}${SBX_URL:-none}${N}"
+        echo -e "  Resource:   $RG"
+        echo ""
+        exit 0
+    fi
     RG=$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null || true)
     SUB=$(azd env get-value AZURE_SUBSCRIPTION_ID 2>/dev/null || true)
     if [ -z "$RG" ]; then
@@ -279,7 +418,11 @@ status)
 down)
     echo ""
     echo -e "  ${R}This will permanently delete all OpenClaw Azure resources.${N}"
-    echo -e "  ${D}Resource group, VNet, OpenAI, container app, storage — everything.${N}"
+    if is_sandbox; then
+        echo -e "  ${D}Resource group, sandbox group (all sandboxes + disk images), OpenAI, ACR — everything.${N}"
+    else
+        echo -e "  ${D}Resource group, VNet, OpenAI, container app, storage — everything.${N}"
+    fi
     echo ""
     read -rp "  Are you sure? [y/N]: " CONFIRM
     if [[ ! "$CONFIRM" =~ ^[Yy] ]]; then
@@ -300,6 +443,15 @@ down)
 
 deploy)
     echo ""
+    if is_sandbox; then
+        echo -e "  ${C}Rebuilding the image and re-booting the OpenClaw sandbox...${N}"
+        echo ""
+        bash "$ROOT/infra/hooks/sandbox.sh"
+        echo ""
+        echo -e "  ${G}Done! Run 'devclaw status' to verify.${N}"
+        echo ""
+        exit 0
+    fi
     echo -e "  ${C}Rebuilding and deploying OpenClaw...${N}"
     echo ""
     azd deploy
@@ -308,11 +460,52 @@ deploy)
     echo ""
     ;;
 
+clone)
+    if ! is_sandbox; then
+        echo ""
+        echo -e "  ${Y}'devclaw clone' is only for the ACA Sandboxes host (USE_SANDBOX=true).${N}"
+        echo ""
+        exit 0
+    fi
+    echo ""
+    echo -e "  ${C}Cloning OpenClaw — reusing the existing image (no rebuild)...${N}"
+    echo -e "  ${D}Boots an additional, independent sandbox in seconds.${N}"
+    echo ""
+    SANDBOX_REUSE_DISK=true SANDBOX_CLONE=true bash "$ROOT/infra/hooks/sandbox.sh"
+    echo ""
+    ;;
+
+exec-mode)
+    MODE="${2:-}"
+    CUR=$(azd env get-value EXECUTION_MODE 2>/dev/null || echo "inproc")
+    if [ "$MODE" != "inproc" ] && [ "$MODE" != "sandbox" ]; then
+        echo ""
+        echo -e "  ${C}Execution mode${N} (current: ${G}${CUR:-inproc}${N})"
+        echo -e "  ${D}inproc${N}  — run tools in the Gateway container (today's behavior)"
+        echo -e "  ${D}sandbox${N} — offload untrusted tool execution to ephemeral ACA Sandboxes"
+        echo -e "  ${D}Usage: devclaw exec-mode <inproc|sandbox> then 'devclaw up'${N}"
+        echo ""
+        exit 0
+    fi
+    azd env set EXECUTION_MODE "$MODE" >/dev/null
+    echo ""
+    echo -e "  ${G}EXECUTION_MODE=$MODE${N} saved. Run ${C}devclaw up${N} to apply."
+    echo ""
+    ;;
+
 teams)
     echo ""
     echo -e "  ${C}Microsoft Teams Setup (optional add-on)${N}"
     echo -e "  ${C}---------------------------------------${N}"
     echo ""
+
+    if is_sandbox; then
+        echo -e "  ${Y}The Teams add-on requires the Azure Container Apps host.${N}"
+        echo -e "  ${D}It isn't available with the ACA Sandboxes host (USE_SANDBOX=true).${N}"
+        echo -e "  ${D}Deploy without USE_SANDBOX to use Teams.${N}"
+        echo ""
+        exit 0
+    fi
 
     get_app
 
@@ -358,24 +551,37 @@ teams)
     FQDN=$(az containerapp show --name "$APP" --resource-group "$RG" \
         --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null)
 
+    # The live bot lookup can come back empty if `az` is pointed at a config dir
+    # with no signed-in account. The sideload package only needs BOT_APP_ID, so
+    # don't hard-fail when we have it — warn, skip the (idempotent) channel
+    # enable, and still build the zip.
+    SKIP_CHANNEL=""
     if [ -z "$BOT_NAME" ]; then
-        echo -e "  ${R}No Azure Bot found in $RG even after provisioning.${N}"
-        echo -e "  ${D}Check 'azd provision' output for errors.${N}"
-        exit 1
+        if [ -n "$BOT_APP_ID" ]; then
+            echo -e "  ${Y}Couldn't read the live Azure Bot resource (az auth context).${N}"
+            echo -e "  ${Y}BOT_APP_ID is set, so building the package anyway.${N}"
+            SKIP_CHANNEL=1
+        else
+            echo -e "  ${R}No Azure Bot found in $RG even after provisioning.${N}"
+            echo -e "  ${D}Check 'azd provision' output for errors.${N}"
+            exit 1
+        fi
     fi
 
-    echo -e "  Bot:      ${C}${BOT_NAME}${N}"
-    echo -e "  Endpoint: ${C}https://${FQDN}/api/messages${N}"
-    echo ""
+    if [ -z "$SKIP_CHANNEL" ]; then
+        echo -e "  Bot:      ${C}${BOT_NAME}${N}"
+        echo -e "  Endpoint: ${C}https://${FQDN}/api/messages${N}"
+        echo ""
 
-    # Enable Teams channel (check first, create if missing)
-    echo -e "  ${C}Checking Teams channel...${N}"
-    if az bot msteams show --name "$BOT_NAME" --resource-group "$RG" -o none 2>/dev/null; then
-        echo -e "  ${G}Teams channel already enabled${N}"
-    else
-        echo -e "  ${C}Creating Teams channel...${N}"
-        az bot msteams create --name "$BOT_NAME" --resource-group "$RG" -o none 2>/dev/null
-        echo -e "  ${G}Teams channel enabled${N}"
+        # Enable Teams channel (check first, create if missing)
+        echo -e "  ${C}Checking Teams channel...${N}"
+        if az bot msteams show --name "$BOT_NAME" --resource-group "$RG" -o none 2>/dev/null; then
+            echo -e "  ${G}Teams channel already enabled${N}"
+        else
+            echo -e "  ${C}Creating Teams channel...${N}"
+            az bot msteams create --name "$BOT_NAME" --resource-group "$RG" -o none 2>/dev/null
+            echo -e "  ${G}Teams channel enabled${N}"
+        fi
     fi
 
     # Build Teams app manifest

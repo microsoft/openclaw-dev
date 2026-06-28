@@ -12,22 +12,15 @@ Write-Host "[preprovision] Environment: $envName"
 # `az account show`; if it fails, clear AZURE_CONFIG_DIR so the CLI falls back
 # to its default (~/.azure on Linux, %USERPROFILE%\.azure on Windows) where
 # the user's real credentials live.
-$authOk = $false
-try {
-    & az account show -o none 2>$null
-    if ($LASTEXITCODE -eq 0) { $authOk = $true }
-} catch {}
-if (-not $authOk -and $env:AZURE_CONFIG_DIR) {
+& az account show -o none 2>$null
+if ($LASTEXITCODE -ne 0 -and $env:AZURE_CONFIG_DIR) {
     Write-Host "[preprovision] az not authenticated in AZURE_CONFIG_DIR=$env:AZURE_CONFIG_DIR — falling back to default config dir"
     Remove-Item Env:AZURE_CONFIG_DIR -ErrorAction SilentlyContinue
-    try {
-        & az account show -o none 2>$null
-        if ($LASTEXITCODE -eq 0) { $authOk = $true }
-    } catch {}
-}
-if (-not $authOk) {
-    Write-Host "[preprovision] ERROR: az still not authenticated. Run 'az login' and retry."
-    exit 1
+    & az account show -o none 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[preprovision] ERROR: az still not authenticated. Run 'az login' and retry."
+        exit 1
+    }
 }
 
 # Helper: get azd env value, return empty string if key doesn't exist
@@ -38,10 +31,8 @@ function Get-AzdValue($key) {
 }
 
 # Helper: read a free-form azd env value (e.g. boolean flags), trimmed.
-# Returns empty string if the key doesn't exist (azd writes errors to stdout).
 function Get-AzdFlag($key) {
     $raw = azd env get-value $key 2>$null
-    if ($LASTEXITCODE -ne 0) { return "" }
     if ($null -eq $raw) { return "" }
     return ([string]$raw).Trim()
 }
@@ -53,27 +44,14 @@ function Get-AzdFlag($key) {
 #   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>
 $smr = Get-AzdFlag "SERVICE_MANAGEMENT_REFERENCE"
 $smrArgs = @()
-if (-not $smr) {
-    # Auto-detect: look for an SMR on the user's existing app registrations
-    Write-Host "[preprovision] SERVICE_MANAGEMENT_REFERENCE not set — checking existing app registrations..."
-    $detectedSmr = az ad app list --show-mine --query "[?serviceManagementReference != null].serviceManagementReference | [0]" -o tsv 2>$null
-    if ($detectedSmr -and $detectedSmr -match '^[0-9a-fA-F-]{36}$') {
-        Write-Host "[preprovision] Auto-detected SMR from your existing apps: $detectedSmr"
-        Write-Host "[preprovision] Using it. To override, run: azd env set SERVICE_MANAGEMENT_REFERENCE <your-guid>"
-        $smr = $detectedSmr
-        azd env set SERVICE_MANAGEMENT_REFERENCE $smr
-        Write-Host "[preprovision] Saved SERVICE_MANAGEMENT_REFERENCE=$smr"
-    } else {
-        Write-Host "[preprovision] No SMR found on your existing apps — proceeding without one."
-        Write-Host "[preprovision]   If app creation fails with 'ServiceManagementReference field is required',"
-        Write-Host "[preprovision]   get the GUID from your tenant admin and run:"
-        Write-Host "[preprovision]     azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
-        Write-Host "[preprovision]     devclaw up"
-    }
-}
 if ($smr) {
-    Write-Host "[preprovision] Using serviceManagementReference: $smr"
-    $smrArgs = @("--service-management-reference", $smr)
+    if ($smr -match '^[0-9a-fA-F-]{36}$') {
+        Write-Host "[preprovision] Using serviceManagementReference: $smr"
+        $smrArgs = @("--service-management-reference", $smr)
+    } else {
+        Write-Host "[preprovision] WARNING: SERVICE_MANAGEMENT_REFERENCE='$smr' is not a GUID - ignoring it."
+        Write-Host "[preprovision]   Set it to the service-tree GUID from your tenant admin: azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -94,17 +72,9 @@ if ($botAppId) {
     $appName = "openclaw-bot-$envName"
     Write-Host "[preprovision] Creating bot app registration: $appName"
 
-    $botOutput = az ad app create --display-name $appName --sign-in-audience "AzureADMyOrg" @smrArgs --query appId -o tsv 2>&1
-    $botAppId = $botOutput | Where-Object { $_ -match '^[0-9a-f-]{36}$' } | Select-Object -First 1
+    $botAppId = az ad app create --display-name $appName --sign-in-audience "AzureADMyOrg" @smrArgs --query appId -o tsv 2>$null
     if (-not $botAppId) {
         Write-Host "[preprovision] ERROR: Failed to create bot app registration"
-        if ("$botOutput" -match "(?i)serviceManagementReference") {
-            Write-Host "[preprovision]   Cause: Your tenant requires a serviceManagementReference on app registrations."
-            Write-Host "[preprovision]   Fix:   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
-            Write-Host "[preprovision]          (get the GUID from your tenant admin)"
-        } else {
-            Write-Host "[preprovision]   Output: $botOutput"
-        }
         exit 1
     }
 
@@ -143,31 +113,22 @@ if ($easyAuthAppId) {
     $authAppName = "openclaw-auth-$envName"
     Write-Host "[preprovision] Creating Easy Auth app registration: $authAppName"
 
-    $authOutput = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
+    $easyAuthAppId = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
         --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" `
         --enable-id-token-issuance true `
         @smrArgs `
-        --query appId -o tsv 2>&1
-    $easyAuthAppId = $authOutput | Where-Object { $_ -match '^[0-9a-f-]{36}$' } | Select-Object -First 1
+        --query appId -o tsv 2>$null
     if (-not $easyAuthAppId) {
         Write-Host "[preprovision] Retrying Easy Auth app creation after 5s..."
         Start-Sleep -Seconds 5
-        $authOutput = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
+        $easyAuthAppId = az ad app create --display-name $authAppName --sign-in-audience "AzureADMyOrg" `
             --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" `
             --enable-id-token-issuance true `
             @smrArgs `
-            --query appId -o tsv 2>&1
-        $easyAuthAppId = $authOutput | Where-Object { $_ -match '^[0-9a-f-]{36}$' } | Select-Object -First 1
+            --query appId -o tsv 2>$null
     }
     if (-not $easyAuthAppId) {
         Write-Host "[preprovision] ERROR: Failed to create Easy Auth app registration"
-        if ("$authOutput" -match "(?i)serviceManagementReference") {
-            Write-Host "[preprovision]   Cause: Your tenant requires a serviceManagementReference on app registrations."
-            Write-Host "[preprovision]   Fix:   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
-            Write-Host "[preprovision]          (get the GUID from your tenant admin)"
-        } else {
-            Write-Host "[preprovision]   Output: $authOutput"
-        }
         exit 1
     }
 

@@ -7,7 +7,7 @@ Identity** (no API keys), gated by **Entra ID Easy Auth**, with an optional
 
 When the user asks you to deploy, configure, operate, troubleshoot, connect to
 Teams, or tear down this template, **follow the playbook in
-[`skills/openclaw-on-azure/SKILL.md`](../skills/openclaw-on-azure/SKILL.md)**.
+[`skills/openclaw-dev/SKILL.md`](../skills/openclaw-dev/SKILL.md)**.
 Use this repo's own scripts, env-var contract, region list, and error catalog
 instead of guessing.
 
@@ -33,7 +33,7 @@ instead of guessing.
   gateway token + sessions won't persist across replica restarts). ACR admin
   is already disabled; image pulls use the container app's managed identity.
 - **Model scope:** today this targets **Azure OpenAI** models only (default
-  `gpt-5-mini`). Do not claim Claude or other Foundry Models work today — they are
+  `gpt-5.4-mini`). Do not claim Claude or other Foundry Models work today — they are
   "near future" scope.
 - **Passwordless:** the model is called keyless via Managed Identity
   (`disableLocalAuth: true`). Never add API keys or suggest key-based auth.

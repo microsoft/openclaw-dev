@@ -2,7 +2,11 @@
 setlocal enabledelayedexpansion
 REM devclaw.cmd - OpenClaw in the Microsoft Cloud (Windows)
 REM Wraps the bash script for cmd/PowerShell use
-set "AZURE_CONFIG_DIR=%~dp0.azure"
+REM Respect an az config dir already scoped by the environment (e.g. VS Code's
+REM .azure-cli); only fall back to the repo-local .azure when nothing is set.
+REM Pinning az at a dir with no signed-in account is the #1 cause of false
+REM "resource not found" errors in status/teams.
+if not defined AZURE_CONFIG_DIR set "AZURE_CONFIG_DIR=%~dp0.azure"
 set "COMMAND=%1"
 if "%COMMAND%"=="" set "COMMAND=status"
 
@@ -19,6 +23,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Detect the ACA Sandboxes host (USE_SANDBOX=true) — selects sandbox variants
+REM of the lifecycle commands below.
+set "USE_SANDBOX="
+for /f "tokens=*" %%a in ('call azd env get-value USE_SANDBOX 2^>nul') do set "USE_SANDBOX=%%a"
+
 if "%COMMAND%"=="login" goto :login
 if "%COMMAND%"=="up" goto :up
 if "%COMMAND%"=="down" goto :down
@@ -30,6 +39,8 @@ if "%COMMAND%"=="logs" goto :logs
 if "%COMMAND%"=="test" goto :test
 if "%COMMAND%"=="deploy" goto :deploy
 if "%COMMAND%"=="teams" goto :teams
+if "%COMMAND%"=="clone" goto :clone
+if "%COMMAND%"=="exec-mode" goto :exec_mode
 goto :help
 
 :login
@@ -42,6 +53,7 @@ echo.
 exit /b 0
 
 :up
+if /i "%USE_SANDBOX%"=="true" goto :up_sandbox
 echo.
 echo   Deploying OpenClaw to Azure...
 call azd up
@@ -92,6 +104,7 @@ echo.
 exit /b 0
 
 :start
+if /i "%USE_SANDBOX%"=="true" goto :start_sandbox
 for /f "tokens=*" %%a in ('azd env get-value AZURE_RESOURCE_GROUP 2^>nul') do set "RG=%%a"
 for /f "tokens=*" %%a in ('az containerapp list --resource-group %RG% --query "[0].name" -o tsv 2^>nul') do set "APP=%%a"
 echo.
@@ -102,6 +115,7 @@ echo.
 exit /b 0
 
 :stop
+if /i "%USE_SANDBOX%"=="true" goto :stop_sandbox
 for /f "tokens=*" %%a in ('azd env get-value AZURE_RESOURCE_GROUP 2^>nul') do set "RG=%%a"
 for /f "tokens=*" %%a in ('az containerapp list --resource-group %RG% --query "[0].name" -o tsv 2^>nul') do set "APP=%%a"
 echo.
@@ -112,6 +126,7 @@ echo.
 exit /b 0
 
 :restart
+if /i "%USE_SANDBOX%"=="true" goto :restart_sandbox
 for /f "tokens=*" %%a in ('azd env get-value AZURE_RESOURCE_GROUP 2^>nul') do set "RG=%%a"
 for /f "tokens=*" %%a in ('az containerapp list --resource-group %RG% --query "[0].name" -o tsv 2^>nul') do set "APP=%%a"
 for /f "tokens=*" %%a in ('az containerapp revision list --name %APP% --resource-group %RG% --query "[?properties.active].name" -o tsv 2^>nul') do set "REV=%%a"
@@ -123,6 +138,7 @@ echo.
 exit /b 0
 
 :status
+if /i "%USE_SANDBOX%"=="true" goto :status_sandbox
 for /f "tokens=*" %%a in ('azd env get-value AZURE_RESOURCE_GROUP 2^>nul') do set "RG=%%a"
 for /f "tokens=*" %%a in ('az containerapp list --resource-group %RG% --query "[0].name" -o tsv 2^>nul') do set "APP=%%a"
 for /f "tokens=*" %%a in ('az containerapp revision list --name %APP% --resource-group %RG% --query "[?properties.active].properties.runningState" -o tsv 2^>nul') do set "STATUS=%%a"
@@ -138,6 +154,7 @@ echo.
 exit /b 0
 
 :logs
+if /i "%USE_SANDBOX%"=="true" goto :logs_sandbox
 for /f "tokens=*" %%a in ('azd env get-value AZURE_RESOURCE_GROUP 2^>nul') do set "RG=%%a"
 for /f "tokens=*" %%a in ('az containerapp list --resource-group %RG% --query "[0].name" -o tsv 2^>nul') do set "APP=%%a"
 echo.
@@ -147,6 +164,7 @@ call az containerapp logs show --name %APP% --resource-group %RG% --follow --tai
 exit /b 0
 
 :test
+if /i "%USE_SANDBOX%"=="true" goto :test_sandbox
 for /f "tokens=*" %%a in ('azd env get-value AZURE_RESOURCE_GROUP 2^>nul') do set "RG=%%a"
 for /f "tokens=*" %%a in ('az containerapp list --resource-group %RG% --query "[0].name" -o tsv 2^>nul') do set "APP=%%a"
 for /f "tokens=*" %%a in ('az containerapp revision list --name %APP% --resource-group %RG% --query "[?properties.active].properties.runningState" -o tsv 2^>nul') do set "STATUS=%%a"
@@ -165,6 +183,7 @@ echo.
 exit /b 0
 
 :deploy
+if /i "%USE_SANDBOX%"=="true" goto :deploy_sandbox
 echo.
 echo   Rebuilding and deploying OpenClaw...
 call azd deploy
@@ -173,6 +192,7 @@ echo.
 exit /b 0
 
 :teams
+if /i "%USE_SANDBOX%"=="true" goto :teams_sandbox
 echo.
 echo   Microsoft Teams Setup (optional add-on)
 echo   ---------------------------------------
@@ -206,7 +226,7 @@ if "%BOT_ID%"=="" (
         call azd env set ENABLE_TEAMS true
         echo   ENABLE_TEAMS=true saved to azd env.
     )
-    echo   Re-provisioning (creates bot app reg + Azure Bot + Teams channel)...
+    echo   Re-provisioning ^(creates bot app reg + Azure Bot + Teams channel^)...
     echo.
     call azd provision
     for /f "tokens=*" %%i in ('azd env get-value BOT_APP_ID 2^>nul') do set "BOT_ID=%%i"
@@ -224,12 +244,20 @@ if "%BOT_ID%"=="" (
 REM Find the bot resource name in the resource group
 for /f "tokens=*" %%i in ('az resource list --resource-group %RG% --resource-type "Microsoft.BotService/botServices" --query "[0].name" -o tsv 2^>nul') do set "BOT_NAME=%%i"
 
+set "SKIP_CHANNEL="
 if "%BOT_NAME%"=="" (
-    echo   No Azure Bot found in %RG% even after provisioning.
-    echo   Check 'azd provision' output for errors.
-    exit /b 1
+    if not "%BOT_ID%"=="" (
+        echo   Couldn't read the live Azure Bot resource ^(az auth context^).
+        echo   BOT_APP_ID is set, so building the package anyway.
+        set "SKIP_CHANNEL=1"
+    ) else (
+        echo   No Azure Bot found in %RG% even after provisioning.
+        echo   Check 'azd provision' output for errors.
+        exit /b 1
+    )
 )
 
+if "!SKIP_CHANNEL!"=="1" goto :teams_zip
 echo   Bot:      %BOT_NAME%
 echo   Endpoint: https://%FQDN%/api/messages
 echo.
@@ -240,6 +268,7 @@ for /f "tokens=*" %%i in ('az account show --query id -o tsv 2^>nul') do set "SU
 echo. | az rest --method PUT --url "https://management.azure.com/subscriptions/%SUB_ID%/resourceGroups/%RG%/providers/Microsoft.BotService/botServices/%BOT_NAME%/channels/MsTeamsChannel?api-version=2022-09-15" --body "{\"location\":\"global\",\"properties\":{\"channelName\":\"MsTeamsChannel\",\"properties\":{\"isEnabled\":true}}}" -o none 2>nul
 echo   Teams channel ready.
 
+:teams_zip
 REM Build Teams app package
 echo   Building Teams app package...
 if not exist "teams\package" mkdir "teams\package"
@@ -265,6 +294,194 @@ echo     Add ^> DM the bot to test
 echo.
 exit /b 0
 
+REM ===========================================================================
+REM ACA Sandboxes host variants (USE_SANDBOX=true)
+REM ===========================================================================
+
+:resolve_sandbox
+set "GROUP="
+set "SBX="
+set "SBX_URL="
+for /f "tokens=*" %%a in ('call azd env get-value AZURE_SANDBOX_GROUP_NAME 2^>nul') do set "GROUP=%%a"
+for /f "tokens=*" %%a in ('call azd env get-value AZURE_SANDBOX_ID 2^>nul') do set "SBX=%%a"
+for /f "tokens=*" %%a in ('call azd env get-value SANDBOX_URL 2^>nul') do set "SBX_URL=%%a"
+if "%GROUP%"=="" (
+    echo   No sandbox deployment found. Run 'devclaw up' first.
+    exit /b 1
+)
+where aca >nul 2>&1
+if errorlevel 1 (
+    echo   aca CLI not found. Install: https://aka.ms/aca-cli-install
+    exit /b 1
+)
+exit /b 0
+
+:up_sandbox
+echo.
+echo   Deploying OpenClaw to Azure (ACA Sandboxes host)...
+echo   Provisions Azure OpenAI + a sandbox group with managed identity,
+echo   then builds the image and boots a sandbox via the aca CLI.
+echo.
+call azd provision
+if errorlevel 1 (
+    echo.
+    echo   Provisioning failed. Common fixes:
+    echo.
+    echo   - "NoRegisteredProviderFound" / api-version on SandboxGroups?
+    echo     ACA Sandboxes is Early Access. Ensure it's enabled on your
+    echo     subscription, or update the api-version literal in
+    echo       infra\sandbox.bicep
+    echo.
+    echo   - "InvalidTemplateDeployment" on OpenAI model?
+    echo     Your region may not have the model SKU. Run:
+    echo       azd env set AZURE_OPENAI_LOCATION eastus2
+    echo       devclaw up
+    echo.
+    exit /b 1
+)
+set "SBX_URL="
+for /f "tokens=*" %%a in ('call azd env get-value SANDBOX_URL 2^>nul') do set "SBX_URL=%%a"
+echo.
+echo   OpenClaw sandbox deployed!
+if not "%SBX_URL%"=="" echo   URL: %SBX_URL%
+echo   Run 'devclaw status' to check it.
+echo.
+exit /b 0
+
+:start_sandbox
+call :resolve_sandbox || exit /b 1
+echo.
+echo   Resuming OpenClaw sandbox...
+call aca sandbox resume --id %SBX% >nul 2>&1
+echo   Sandbox resumed. State restored in place.
+echo.
+exit /b 0
+
+:stop_sandbox
+call :resolve_sandbox || exit /b 1
+echo.
+echo   Suspending OpenClaw sandbox...
+echo   Memory + disk state preserved. Resume in sub-second.
+call aca sandbox stop --id %SBX% >nul 2>&1
+echo   Sandbox suspended. No compute running.
+echo.
+exit /b 0
+
+:restart_sandbox
+call :resolve_sandbox || exit /b 1
+echo.
+echo   Cycling the OpenClaw sandbox (suspend + resume)...
+call aca sandbox stop --id %SBX% >nul 2>&1
+call aca sandbox resume --id %SBX% >nul 2>&1
+echo   Sandbox cycled.
+echo.
+exit /b 0
+
+:status_sandbox
+call :resolve_sandbox || exit /b 1
+set "STATE="
+for /f "tokens=2 delims=:" %%a in ('aca sandbox get --id %SBX% -o json 2^>nul ^| findstr state') do if not defined STATE set "STATE=%%a"
+if defined STATE set "STATE=%STATE:"=%"
+if defined STATE set "STATE=%STATE:,=%"
+if defined STATE set "STATE=%STATE: =%"
+echo.
+echo   devclaw
+echo   --------
+echo   Host:     ACA Sandboxes
+echo   Group:    %GROUP%
+echo   Sandbox:  %SBX%
+echo   Status:   %STATE%
+echo   URL:      %SBX_URL%
+echo.
+exit /b 0
+
+:logs_sandbox
+call :resolve_sandbox || exit /b 1
+echo.
+echo   Opening an interactive shell in the sandbox (exit to return)...
+echo   Inside, inspect the gateway with: openclaw gateway --help
+echo.
+call aca sandbox shell --id %SBX%
+exit /b 0
+
+:test_sandbox
+call :resolve_sandbox || exit /b 1
+set "STATE="
+for /f "tokens=2 delims=:" %%a in ('aca sandbox get --id %SBX% -o json 2^>nul ^| findstr state') do if not defined STATE set "STATE=%%a"
+if defined STATE set "STATE=%STATE:"=%"
+if defined STATE set "STATE=%STATE:,=%"
+if defined STATE set "STATE=%STATE: =%"
+echo.
+if "%STATE%"=="Running" (
+    echo   Sandbox: Running
+) else (
+    echo   Sandbox: %STATE% - suspended sandboxes auto-resume on access
+)
+echo   Auth mode: managed-identity
+if not "%SBX_URL%"=="" echo   URL: %SBX_URL%
+echo.
+echo   Send a test message from inside the sandbox:
+echo     aca sandbox exec --id %SBX% -c "openclaw agent -m \"Hello from the cloud!\""
+echo.
+exit /b 0
+
+:deploy_sandbox
+echo.
+echo   Rebuilding the image and re-booting the OpenClaw sandbox...
+echo.
+call pwsh -NoProfile -File "%~dp0infra\hooks\sandbox.ps1"
+echo.
+echo   Done! Run 'devclaw status' to verify.
+echo.
+exit /b 0
+
+:clone
+if /i "%USE_SANDBOX%"=="true" goto :clone_go
+echo.
+echo   'devclaw clone' is only for the ACA Sandboxes host. Set USE_SANDBOX=true.
+echo.
+exit /b 0
+:clone_go
+echo.
+echo   Cloning OpenClaw - reusing the existing image, no rebuild...
+echo   Boots an additional, independent sandbox in seconds.
+echo.
+set "SANDBOX_REUSE_DISK=true"
+set "SANDBOX_CLONE=true"
+call pwsh -NoProfile -File "%~dp0infra\hooks\sandbox.ps1"
+set "SANDBOX_REUSE_DISK="
+set "SANDBOX_CLONE="
+echo.
+exit /b 0
+
+:teams_sandbox
+echo.
+echo   The Teams add-on requires the Azure Container Apps host.
+echo   It isn't available with the ACA Sandboxes host (USE_SANDBOX=true).
+echo   Deploy without USE_SANDBOX to use Teams.
+echo.
+exit /b 0
+
+:exec_mode
+set "MODE=%2"
+set "CUR=inproc"
+for /f "tokens=*" %%a in ('call azd env get-value EXECUTION_MODE 2^>nul') do set "CUR=%%a"
+if /i "%MODE%"=="inproc" goto :exec_mode_set
+if /i "%MODE%"=="sandbox" goto :exec_mode_set
+echo.
+echo   Execution mode (current: %CUR%)
+echo     inproc  - run tools in the Gateway container (today's behavior)
+echo     sandbox - offload untrusted tool execution to ephemeral ACA Sandboxes
+echo     Usage: devclaw exec-mode ^<inproc^|sandbox^> then 'devclaw up'
+echo.
+exit /b 0
+:exec_mode_set
+call azd env set EXECUTION_MODE %MODE% >nul
+echo.
+echo   EXECUTION_MODE=%MODE% saved. Run 'devclaw up' to apply.
+echo.
+exit /b 0
+
 :help
 echo.
 echo   devclaw - OpenClaw in the Microsoft Cloud
@@ -283,6 +500,7 @@ echo     devclaw restart    Restart the agent
 echo     devclaw status     Check agent status
 echo     devclaw logs       Stream live logs
 echo     devclaw deploy     Rebuild and deploy after code changes
+echo     devclaw clone      (sandbox) Boot another OpenClaw from the existing image
 echo.
 echo   Cleanup:
 echo     devclaw down       Delete all Azure resources

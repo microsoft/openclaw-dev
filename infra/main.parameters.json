@@ -26,6 +26,27 @@
     "useExpressEnv": {
       "value": "${USE_EXPRESS_ENV=false}"
     },
+    "useSandbox": {
+      "value": "${USE_SANDBOX=false}"
+    },
+    "executionMode": {
+      "value": "${EXECUTION_MODE=inproc}"
+    },
+    "workerIdentityClientId": {
+      "value": "${WORKER_IDENTITY_CLIENT_ID=}"
+    },
+    "execAcrImage": {
+      "value": "${EXEC_ACR_IMAGE=}"
+    },
+    "execImageDigest": {
+      "value": "${EXEC_IMAGE_DIGEST=}"
+    },
+    "execDiskId": {
+      "value": "${EXEC_DISK_ID=}"
+    },
+    "execSnapshot": {
+      "value": "${EXEC_SNAPSHOT=}"
+    },
     "skipStorage": {
       "value": "${SKIP_STORAGE=false}"
     },

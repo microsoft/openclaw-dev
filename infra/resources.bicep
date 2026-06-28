@@ -19,14 +19,14 @@ param sku string = 'S0'
 @description('Deploy the AI model automatically')
 param deployAiModel bool = true
 
-@description('AI model to deploy (Azure OpenAI in Foundry Models; default gpt-5-mini)')
-param aiModelName string = 'gpt-5-mini'
+@description('AI model to deploy (Azure OpenAI in Foundry Models; default gpt-5.4-mini)')
+param aiModelName string = 'gpt-5.4-mini'
 
 @description('AI model version')
-param aiModelVersion string = '2025-08-07'
+param aiModelVersion string = '2026-03-17'
 
 @description('AI model deployment capacity (tokens-per-minute in thousands)')
-param aiModelCapacity int = 10
+param aiModelCapacity int = 50
 
 // Deploy the Azure OpenAI account via AVM (account only — no model deployment).
 // We create the model deployment as a native resource below so we can attach a
