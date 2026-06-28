@@ -2,6 +2,23 @@
 # with the actual host FQDN (only known after Bicep provisioning).
 $ErrorActionPreference = "Stop"
 
+# ACA Sandboxes host (USE_SANDBOX=true) is a different backend with no Easy
+# Auth app registration. Delegate the entire data-plane bring-up to sandbox.ps1
+# and skip the container-app redirect-URI fixup below.
+$useSandbox = (azd env get-value USE_SANDBOX 2>$null)
+if ($useSandbox -and $useSandbox.Trim().ToLower() -eq 'true') {
+    & (Join-Path $PSScriptRoot 'sandbox.ps1')
+    exit $LASTEXITCODE
+}
+
+# Execution layer (EXECUTION_MODE=sandbox): the Gateway stays on ACA; build the
+# exec image + disk + warm snapshot and inject ids into the Gateway. Runs
+# alongside the Easy Auth fixup below (independent).
+$execMode = (azd env get-value EXECUTION_MODE 2>$null)
+if ($execMode -and $execMode.Trim().ToLower() -eq 'sandbox') {
+    & (Join-Path $PSScriptRoot 'execution.ps1')
+}
+
 # Ensure az CLI is authenticated (azd hooks use a repo-local config dir)
 $authOk = $false
 try {

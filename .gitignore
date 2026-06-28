@@ -16,3 +16,18 @@ _local/
 # Source of truth is teams/manifest.json + teams/package/{color,outline}.png
 teams/package/manifest.json
 teams/openclaw-teams-app.zip
+
+# Session/demo talk deck — a local presentation artifact, not part of the
+# template. The committed architecture diagram (docs/architecture-sandbox.svg)
+# is the source of truth for the product topology.
+docs/*.pptx
+
+# Compiled Bicep ARM output. azd provisions from the .bicep sources directly;
+# these are `bicep build` artifacts, regenerated on demand and not referenced
+# anywhere. (Do NOT ignore main.parameters.json — that one is required.)
+infra/main.json
+infra/execution.json
+
+# Python bytecode cache
+__pycache__/
+*.pyc

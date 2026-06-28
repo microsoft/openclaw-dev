@@ -68,6 +68,23 @@ if [ -f "$CONTROL_UI" ]; then
     echo "[openclaw] Injected auto-connect token into control UI HTML"
 fi
 
+# Execution layer: when EXECUTION_MODE=sandbox, register the sandbox MCP server
+# so the model can offload untrusted tool execution to ephemeral ACA Sandboxes.
+# OpenClaw spawns the server over stdio with a *scrubbed* environment (the MCP
+# host drops inherited host env for startup safety), so the group config +
+# managed-identity settings must be forwarded explicitly via the `env` field.
+# All of these keys pass OpenClaw's stdio env allow-list; none are secrets.
+if [ "${EXECUTION_MODE:-inproc}" = "sandbox" ]; then
+    echo "[openclaw] EXECUTION_MODE=sandbox — registering sandbox MCP server"
+    node -e "const fs=require('fs');const p='/root/.openclaw/openclaw.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.mcp=c.mcp||{};c.mcp.servers=c.mcp.servers||{};const KEYS=['EXECUTION_MODE','AZURE_SUBSCRIPTION_ID','AZURE_RESOURCE_GROUP','AZURE_SANDBOX_GROUP_NAME','AZURE_LOCATION','SANDBOX_API_VERSION','SANDBOX_MANAGED_IDENTITY','STARTUP','SANDBOX_SCOPE','SANDBOX_DRIVER','EXEC_ACR_IMAGE','EXEC_IMAGE_DIGEST','EXEC_DISK_ID','EXEC_SNAPSHOT','OPENAI_BASE_URL','OPENAI_MODEL_DEPLOYMENT','WORKER_IDENTITY_CLIENT_ID','AZURE_SANDBOX_IDENTITY_CLIENT_ID','SANDBOX_EGRESS_ALLOW','SANDBOX_IDLE_SUSPEND_S','SANDBOX_EXEC_TIMEOUT_S'];const env={};for(const k of KEYS){const v=process.env[k];if(v!==undefined&&v!=='')env[k]=v;}c.mcp.servers['openclaw-sandbox']={command:'python3',args:['-m','sandbox_mcp.server'],env,enabled:true};fs.writeFileSync(p,JSON.stringify(c,null,2));console.error('[openclaw] sandbox MCP env forwarded: '+Object.keys(env).join(','));" \
+        && echo "[openclaw] sandbox MCP server registered (python3 -m sandbox_mcp.server)" \
+        || echo "[openclaw] WARNING: failed to register sandbox MCP server"
+    # Smoke the adapter deps + import so failures surface in logs (non-fatal).
+    python3 -c "import mcp, azure.identity, requests; import sandbox_mcp.server" 2>/dev/null \
+        && echo "[openclaw] sandbox MCP deps OK" \
+        || echo "[openclaw] WARNING: sandbox MCP python deps/import failed"
+fi
+
 echo "[openclaw] Config loaded (details redacted from logs)"
 
 # -----------------------------------------------------------------------------

@@ -1,16 +1,19 @@
 ---
-name: openclaw-on-azure
+name: openclaw-dev
 description: >-
-  Deploy, operate, and troubleshoot a secure, hosted OpenClaw AI assistant on
-  Azure (Azure Container Apps + Azure OpenAI in Foundry Models, passwordless via
-  Managed Identity, Entra ID Easy Auth, optional Microsoft Teams channel) using
-  the repo's `devclaw` wrapper around the Azure Developer CLI (azd). USE FOR:
-  deploy OpenClaw to Azure, "devclaw up" / "azd up" failing, set the model or
-  region, connect OpenClaw to Microsoft Teams / use it from a phone, stop to
-  save cost, start/restart, stream logs, verify the deployment, configure Entra
-  ID sign-in, restrict access to specific users, tear everything down (nuke &
-  pave). DO NOT USE FOR: editing OpenClaw's own source on npm, general Azure
-  resource creation unrelated to this template, non-Azure hosting.
+  Deploy, operate, and troubleshoot the openclaw-dev template: a secure, hosted
+  OpenClaw AI assistant on Azure (Azure Container Apps + Azure OpenAI in Foundry
+  Models, passwordless via Managed Identity, Entra ID Easy Auth, ephemeral
+  sandbox execution, optional Microsoft Teams channel) using the repo's
+  `devclaw` wrapper around the Azure Developer CLI (azd). USE FOR: deploy
+  openclaw-dev / OpenClaw to Azure in one prompt, "devclaw up" / "azd up"
+  failing, set the model or region, switch tool execution to ephemeral sandboxes
+  (EXECUTION_MODE=sandbox / devclaw exec-mode), clone another sandbox, connect
+  OpenClaw to Microsoft Teams / use it from a phone, stop to save cost,
+  start/restart, stream logs, verify the deployment, configure Entra ID sign-in,
+  restrict access to specific users, tear everything down (nuke & pave). DO NOT
+  USE FOR: editing OpenClaw's own source on npm, general Azure resource creation
+  unrelated to this template, non-Azure hosting.
 license: MIT
 ---
 
@@ -27,7 +30,7 @@ Use this repo's own scripts, env-var contract, region list, and error catalog
 action (`devclaw down`, `azd down`, deleting app registrations, RBAC removal).
 
 > Alpha / dev-test template, single-tenant. Today it targets **Azure OpenAI in
-> Foundry Models** (default `gpt-5-mini`), with scope to add Claude and other
+> Foundry Models** (default `gpt-5.4-mini`), with scope to add Claude and other
 > Foundry Models later. Do not promise non-OpenAI models work today.
 
 ---
@@ -50,6 +53,32 @@ If `devclaw`/`devclaw.cmd` is not executable, call `azd` directly (`azd up`, `az
 
 ---
 
+## Deploy in one prompt (zero-effort path)
+
+This skill is built so the user can drive the whole lifecycle in plain English —
+no hand-typed `azd`/`az`. When the user asks, do the work for them end to end and
+report the result:
+
+- *"Deploy openclaw-dev to eastus2."* → confirm prereqs, `azd env set AZURE_LOCATION eastus2`, `./devclaw up`, then open/print the URL from `devclaw status`.
+- *"Run tool execution in ephemeral sandboxes."* → `devclaw exec-mode sandbox` then `./devclaw up`.
+- *"Connect it to Teams so I can use it from my phone."* → `devclaw teams`, then walk the one-time sideload step.
+- *"Stop it to save money."* → `devclaw stop`. *"Bring it back."* → `devclaw start`.
+- *"Why is `devclaw up` failing?"* → read the error, match the catalog below, apply the fix.
+- *"Tear it all down."* → state exactly what will be deleted, get confirmation, then `devclaw down`.
+
+Minimal happy path (browser-only, default in-process execution):
+
+```bash
+azd env set AZURE_LOCATION eastus2     # an allowed region (list below)
+./devclaw up                            # provision + build + deploy (~6 min)
+./devclaw status                        # open the printed URL, sign in
+```
+
+Everything else — Teams, sandbox execution, cost controls — is an opt-in layer on
+top of that same `devclaw up`.
+
+---
+
 ## Command map (`devclaw <cmd>`)
 
 | Command | What it does | Underlying call |
@@ -62,7 +91,9 @@ If `devclaw`/`devclaw.cmd` is not executable, call `azd` directly (`azd up`, `az
 | `start` | Scale to 1 replica (resume after stop) | `az containerapp update --min/max-replicas 1` |
 | `stop` | Scale to 0 replicas — **$0**, state preserved on Azure Files | `az containerapp update --min/max-replicas 0` |
 | `restart` | Restart the active revision | `az containerapp revision restart` |
-| `teams` | **Opt-in.** Enables Teams (re-provisions + redeploys on first run) and builds the sideload zip | `azd provision` + `azd deploy` + `az bot msteams ...` + zip |
+| `teams` | **Opt-in.** Enables Teams (re-provisions + redeploys on first run) and builds the sideload zip | `azd provision` + `azd deploy` + enable Teams channel + zip |
+| `exec-mode <inproc\|sandbox>` | Choose where tools run: in the Gateway container (`inproc`, default) or in ephemeral ACA Sandboxes (`sandbox`). Apply with `devclaw up` | `azd env set EXECUTION_MODE …` |
+| `clone` | (ACA Sandboxes host only) Boot another OpenClaw from the existing disk image — independent URL + token | `aca sandbox …` |
 | `login` | Switch Azure account | `az login` + `azd auth login` |
 | `down` | **DESTRUCTIVE** — delete all resources + Entra app regs | `azd down --purge` + `az ad app delete` |
 
@@ -94,6 +125,10 @@ not `devclaw test`.
 | `AZURE_SUBSCRIPTION_ID` | no | prompted | Set to skip the interactive picker |
 | `AZURE_OPENAI_LOCATION` | no | = `AZURE_LOCATION` | Override when the chosen region lacks the model SKU (e.g. ACA in `eastasia`, OpenAI in `eastus2`) |
 | `USE_EXPRESS_ENV` | no | `false` | ACA Express mode (preview); only in supported regions (East Asia, West Central US) |
+| `USE_SANDBOX` | no | `false` | Use the **ACA Sandboxes** host (preview / Early Access) instead of Azure Container Apps. Mutually exclusive with the Container Apps host and the Teams add-on. Bicep provisions a `Microsoft.App/SandboxGroups` resource + user-assigned managed identity (keyless Azure OpenAI); the postprovision hook (`infra/hooks/sandbox.*`) installs the `aca` CLI, builds the OpenClaw image into ACR, imports it as a disk image, boots a sandbox, and exposes the gateway port. `devclaw up` runs `azd provision` only (sandboxes aren't an azd-native host). Requires the Early Access feature enabled on the subscription; if SandboxGroups fails with an api-version error, update the literal in `infra/sandbox.bicep`. |
+| `SANDBOX_PUBLIC` | no | `false` | Only with `USE_SANDBOX=true`. `false` = the sandbox port is **Entra-gated** to the deployer via the ADC data plane: an allow-list of the deployer's object id (the reliable `oid` claim) + email. `true` = anonymous public URL (anyone with the link). |
+| `SANDBOX_ALLOW_DOMAIN` | no | `false` | Only with `USE_SANDBOX=true` and `SANDBOX_PUBLIC=false`. When `true`, also allow-lists the deployer's email **domain** (e.g. `@contoso.com`) so any corporate login in that domain can reach the sandbox — not just the deployer. The `aca` CLI's `--email` flag alone is unreliable for guest/B2B identities (their token presents a `#EXT#` UPN, not the `mail` claim), so the hook posts `objectIds`/`emails`/`emailSuffixes` directly to the data plane. |
+| `EXECUTION_MODE` | no | `inproc` | **Orchestrator + sandbox execution.** `inproc` = today's single-container behavior (tools run in the Gateway). `sandbox` = the Gateway **stays on ACA** but offloads untrusted tool execution (shell/codegen/file/browser) to **ephemeral ACA Sandboxes**, one per task/session, via the sandbox **MCP server** (`src/sandbox_mcp/`). Bicep provisions an execution sandbox group + worker MI + role assignments (incl. SandboxGroup Data Owner for the Gateway MI); the post-provision hook (`infra/hooks/execution.*`) builds the exec image (`src/execution-env/`), a hash-gated disk image, and a warm snapshot, then injects the ids into the Gateway. Distinct from `USE_SANDBOX` (which replaces the whole host). Set via `devclaw exec-mode sandbox`. |
 | `SKIP_STORAGE` | no | `false` | Set to `true` if Azure Policy blocks `allowSharedKeyAccess: true` on storage accounts (ACA file mounts require shared keys today). Skips the storage account, file share, and volume mount. Trade-off: gateway token + sessions don't persist across replica restarts. |
 | `SERVICE_MANAGEMENT_REFERENCE` | no | unset | Set to a service-management-reference GUID if your tenant requires `serviceManagementReference` on every new app registration (common on large corporate tenants). The preprovision hook passes it to `az ad app create` for both the Easy Auth and the Bot app registrations. |
 | `ENABLE_TEAMS` | no | unset (Teams disabled) | Set to `true` *before* `devclaw up` (or before `devclaw teams`) to opt into the Microsoft Teams add-on. When unset, the preprovision hook skips bot app creation, Bicep skips the Azure Bot + Teams channel + MSTEAMS_* env vars, and the runtime disables the msteams plugin. |
@@ -106,10 +141,11 @@ not `devclaw test`.
 `japaneast`, `koreacentral`, `southindia`, `swedencentral`, `switzerlandnorth`,
 `uksouth`, `westcentralus`.
 
-**Model:** `gpt-5-mini` (version `2025-08-07`, capacity 10 TPM-thousands) is set in
+**Model:** `gpt-5.4-mini` (version `2026-03-17`, capacity 50 TPM-thousands) is set in
 `infra/main.bicep`. To change the model/version/capacity, edit the `openai` module
 params there (`aiModelName`, `aiModelVersion`, `aiModelCapacity`) — they are not env
-vars. Keep it to an **Azure OpenAI** model available in `AZURE_OPENAI_LOCATION`.
+vars. Keep it to an **Azure OpenAI** model available in `AZURE_OPENAI_LOCATION`, and
+keep `src/openclaw.json`'s model id in sync with `aiModelName`.
 
 Example region split when the model isn't in your ACA region:
 
@@ -118,6 +154,19 @@ azd env set AZURE_LOCATION eastasia
 azd env set AZURE_OPENAI_LOCATION eastus2
 ./devclaw up
 ```
+
+---
+
+## Execution & host modes (pick one)
+
+| Mode | How | What it means |
+|---|---|---|
+| **In-process** (default) | nothing to set, or `devclaw exec-mode inproc` | The Gateway runs tools itself, inside its own ACA container. Simplest. |
+| **Sandbox execution** (recommended for untrusted work) | `devclaw exec-mode sandbox` then `devclaw up` | The Gateway **stays on ACA** but offloads each untrusted tool run (shell / codegen / browser) to an **ephemeral ACA Sandbox** via the sandbox MCP server, then throws it away. Teams-compatible. This is the "one brain, many disposable sandboxes" model in the architecture diagram. |
+| **Sandbox host** (experimental) | `azd env set USE_SANDBOX true` then `devclaw up` | The **entire** Gateway runs inside an ACA Sandbox instead of a Container App. Provision-only; **no Teams**. Most users should prefer sandbox *execution* over this. |
+
+`EXECUTION_MODE=sandbox` and `USE_SANDBOX=true` are mutually exclusive. Both
+require the ACA Sandboxes Early Access feature enabled on the subscription.
 
 ---
 
@@ -203,6 +252,7 @@ Teams add-on is enabled). Always confirm with the user before running it.
 | Direct Line / Web Chat / Teams test channel: user message acked (200) but bot reply never arrives. Container logs show `Blocked Microsoft Teams serviceUrl host: directline.botframework.com` | The bundled `@openclaw/msteams` plugin's SSRF guard only allows `smba.trafficmanager.net` + `smba.infra.{gcc,gov,dod}.*` (real Teams channel hosts). Direct Line uses `directline.botframework.com`, so every reply is silently dropped inside the streaming pipeline. | Already shipped: `src/patch-msteams-allowlist.mjs` runs at image build (see `src/Dockerfile`) and extends the plugin's allowlist to include `directline.botframework.com` + `europe.directline.botframework.com`. Idempotent. Remove once upstream plugin exposes a public hook. |
 | Bot reply attempt fails with `AADSTS7000229: The client application <bot-app-id> is missing service principal in the tenant <tenant-id>` | The Bot App Registration was created without an enterprise application (service principal) in the consuming tenant — the Bot Framework token endpoint can't issue tokens to an appId with no SP. Happens when an app reg is provisioned via Graph without `az ad sp create`, or when the bot is consumed cross-tenant. | One-time fix: `az ad sp create --id $(azd env get-value BOT_APP_ID)`. If `az` is rate-limited, call Graph directly: `curl -s -X POST https://graph.microsoft.com/v1.0/servicePrincipals -H "Authorization: Bearer $(az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv)" -H "Content-Type: application/json" -d "{\"appId\":\"$(azd env get-value BOT_APP_ID)\"}"`. No redeploy needed — propagates in <30s. |
 | Bot replies in WebChat but not Teams | Teams channel off or wrong `botId` in sideload | Re-run `devclaw teams` |
+| `devclaw teams` prints "No Azure Bot found" but the bot exists | The wrapper's `az resource list` ran against a config dir with no `az` login (AZURE_CONFIG_DIR pinned to a dir without a session). | Already shipped: the wrapper now respects an env-scoped `AZURE_CONFIG_DIR` and, when `BOT_APP_ID` is set, builds the sideload zip anyway (skipping the idempotent channel enable). If you still hit it, confirm `az account show` works in the same shell, then re-run `devclaw teams`. |
 | `az containerapp exec`/`logs` crashes or hangs (🦞 Unicode / SSL) | Azure CLI bug | Use Azure Portal Console / Log stream |
 | `azd up` warns about permissions | azd heuristic | Safe to proceed, or grant `User Access Administrator` |
 
@@ -211,7 +261,7 @@ Teams add-on is enabled). Always confirm with the user before running it.
 TOKEN=$(az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv)
 ENDPOINT=$(az cognitiveservices account list -g <rg> --query "[0].properties.endpoint" -o tsv)
 curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"model":"gpt-5-mini","messages":[{"role":"user","content":"Hello"}]}' \
+  -d '{"model":"gpt-5.4-mini","messages":[{"role":"user","content":"Hello"}]}' \
   "$ENDPOINT/openai/v1/chat/completions"
 ```
 

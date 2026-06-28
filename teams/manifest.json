@@ -12,7 +12,7 @@
   },
   "description": {
     "short": "AI assistant powered by OpenClaw",
-    "full": "Your personal AI assistant running securely in the Microsoft Cloud. Ask questions, draft documents, review code, summarize meetings, and more — all from Teams."
+    "full": "Your personal AI assistant running securely in the Microsoft Cloud. Ask questions, draft documents, review code, summarize meetings, and more, all from Teams."
   },
   "icons": { "outline": "outline.png", "color": "color.png" },
   "accentColor": "#E94560",

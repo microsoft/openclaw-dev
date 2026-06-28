@@ -38,6 +38,21 @@ param containerImage string = ''
 @description('When true, skip the storage account + Azure Files volume mount. Use on subscriptions where Azure Policy blocks `allowSharedKeyAccess: true` on storage accounts (ACA file mounts require shared keys today). Set SKIP_STORAGE=true in your azd env. Trade-off: gateway token + sessions do not persist across replica restarts.')
 param skipStorage bool = false
 
+@description('Execution mode for the Gateway. inproc = today\'s single-container behavior. sandbox = offload untrusted tool execution to ephemeral ACA Sandboxes via the sandbox MCP server. Worker/disk/snapshot ids are added to the container by the post-provision hook (they only exist after the image is built).')
+param executionMode string = 'inproc'
+
+@description('Sandbox group name the Gateway drives when executionMode=sandbox (deterministic; the execution module creates a group with this name).')
+param sandboxGroupName string = ''
+
+@description('Worker MI client-id for keyless Azure OpenAI from sandboxes. Empty on first provision; the post-provision hook fills it.')
+param workerIdentityClientId string = ''
+
+@description('Execution image / disk / snapshot ids. Empty on first provision; the post-provision hook builds them and updates the container.')
+param execAcrImage string = ''
+param execImageDigest string = ''
+param execDiskId string = ''
+param execSnapshot string = ''
+
 // Teams integration is opt-in. The preprovision hook only creates the Bot
 // app registration when `azd env set ENABLE_TEAMS true` is set, so an empty
 // botAppId is the canonical "Teams disabled" signal.
@@ -92,12 +107,31 @@ var teamsEnv = teamsEnabled ? [
     value: botTenantId
   }
 ] : []
-var containerEnv = concat(baseEnv, teamsEnv)
+// Execution layer: the *known* config the sandbox MCP server needs. The
+// worker MI client-id + EXEC_DISK_ID/EXEC_SNAPSHOT are injected by the
+// post-provision hook (they only exist after the execution image is built),
+// which avoids a Bicep module cycle between the Gateway and the group.
+var sandboxEnabled = toLower(executionMode) == 'sandbox'
+var executionEnv = sandboxEnabled ? [
+  { name: 'EXECUTION_MODE', value: 'sandbox' }
+  { name: 'AZURE_SUBSCRIPTION_ID', value: subscription().subscriptionId }
+  { name: 'AZURE_RESOURCE_GROUP', value: resourceGroup().name }
+  { name: 'AZURE_SANDBOX_GROUP_NAME', value: sandboxGroupName }
+  { name: 'AZURE_LOCATION', value: location }
+  { name: 'SANDBOX_MANAGED_IDENTITY', value: 'system' }
+  { name: 'SANDBOX_DRIVER', value: 'cli' }
+  { name: 'STARTUP', value: 'snapshot' }
+  { name: 'WORKER_IDENTITY_CLIENT_ID', value: workerIdentityClientId }
+  { name: 'EXEC_ACR_IMAGE', value: execAcrImage }
+  { name: 'EXEC_IMAGE_DIGEST', value: execImageDigest }
+  { name: 'EXEC_DISK_ID', value: execDiskId }
+  { name: 'EXEC_SNAPSHOT', value: execSnapshot }
+] : []
+var containerEnv = concat(baseEnv, teamsEnv, executionEnv)
 
 // ---------------------------------------------------------------------------
 // Azure Container Registry — admin disabled (common Azure Policy), pulled via
-// a user-assigned managed identity + AcrPull role assigned BEFORE the
-// container app is created (eliminates the RBAC propagation race condition).
+// the container app's system-assigned managed identity + AcrPull role below.
 // ---------------------------------------------------------------------------
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: 'acr${resourceToken}'
@@ -107,14 +141,18 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   tags: { 'azd-env-name': environmentName }
 }
 
-// User-assigned MI for ACR pull — created before the container app so the
-// AcrPull role can propagate before the first image pull attempt.
+// User-assigned identity for ACR pulls, granted AcrPull BEFORE the container
+// app exists. This breaks the first-provision deadlock where ACA needs to
+// build the registry secret (to provision the revision) before the system MI's
+// AcrPull role has been created — the container app references this identity in
+// its `registries` block, and the role below has no dependency on the app.
 resource acrPullIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'id-acrpull-${resourceToken}'
   location: location
+  tags: { 'azd-env-name': environmentName }
 }
 
-resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource acrPullIdentityRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(subscription().id, acrPullIdentity.id, acr.id, '7f951dda-4ed3-4680-a7ca-43fe172d538d')
   scope: acr
   properties: {
@@ -215,10 +253,17 @@ resource envStorage 'Microsoft.App/managedEnvironments/storages@2024-03-01' = if
 // Scale-to-zero: no compute charges when idle
 // ---------------------------------------------------------------------------
 
-// On first provision containerImage is empty (azd hasn't built yet). We set a
-// placeholder image reference (ACA requires one) but scale to 0 replicas so
-// nothing is actually pulled or started. After `azd deploy` pushes the real
-// image, the postdeploy hook scales the app to 1 replica.
+// Preserve the image that `azd deploy` pushed on prior runs by reading it
+// from the `containerImage` parameter (sourced from SERVICE_OPENCLAW_IMAGE_NAME
+// in main.parameters.json). On first provision the param is empty, so we fall
+// back to a placeholder; subsequent provisions retain whatever azd last pushed.
+//
+// Placeholder vs. real image is also the deciding factor for the listen port:
+// `mcr.microsoft.com/k8se/quickstart:latest` listens on :80, OpenClaw on :18789.
+// On first provision we ingress to :80 with no probes (so the container is
+// healthy immediately and `azd provision` doesn't time out waiting for a
+// port nobody is listening on). The postdeploy hook flips ingress to :18789
+// after the first real `azd deploy` lands.
 var placeholderImage = 'mcr.microsoft.com/k8se/quickstart:latest'
 var isPlaceholder = empty(containerImage)
 var effectiveImage = isPlaceholder ? placeholderImage : containerImage
@@ -233,7 +278,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       '${acrPullIdentity.id}': {}
     }
   }
-  dependsOn: [acrPullRole]
   tags: {
     'azd-env-name': environmentName
     'azd-service-name': 'openclaw'
@@ -245,7 +289,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: acr.properties.loginServer
-          // Pull via user-assigned MI that already has AcrPull role assigned.
+          // Pull via the pre-granted user-assigned identity (id-acrpull) so the
+          // revision can be provisioned without waiting on a role assignment
+          // that depends on this very container app (the first-provision race).
           identity: acrPullIdentity.id
         }
       ]
@@ -305,10 +351,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ] : []
       scale: {
-        // On first provision (no real image yet), scale to 0 so no replica
-        // starts and no image pull is attempted. azd deploy pushes the real
-        // image, then postdeploy scales up to 1.
-        minReplicas: isPlaceholder ? 0 : 1
+        minReplicas: 1
         maxReplicas: 1
       }
     }
@@ -373,6 +416,10 @@ resource cognitiveServicesUserRole 'Microsoft.Authorization/roleAssignments@2022
   }
 }
 
+// ACR pull is handled by the pre-granted `id-acrpull` user-assigned identity
+// (see acrPullIdentityRole near the registry, created before the container app
+// to avoid the first-provision deadlock). No system-MI AcrPull role here.
+
 // ---------------------------------------------------------------------------
 // Outputs
 // ---------------------------------------------------------------------------
@@ -382,6 +429,7 @@ output AZURE_CONTAINER_REGISTRY_NAME string = acr.name
 // (e.g. AKS, App Service) without updating callers or azd env consumers.
 output HOST_FQDN string = containerApp.properties.configuration.ingress.fqdn
 output HOST_NAME string = containerApp.name
+output HOST_PRINCIPAL_ID string = containerApp.identity.principalId
 
 // ---------------------------------------------------------------------------
 // Azure Bot Service (optional — only deployed if botAppId is provided)

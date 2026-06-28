@@ -1,0 +1,7 @@
+# OpenClaw Sandbox MCP server runtime deps.
+# stdlib covers the CLI driver; these add the MCP server + the SDK driver.
+mcp>=1.2
+anyio>=4.0
+# SDK driver (SANDBOX_DRIVER=sdk) — managed-identity-native auth + data-plane HTTP
+azure-identity>=1.19
+requests>=2.32

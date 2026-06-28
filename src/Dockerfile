@@ -71,6 +71,39 @@ COPY patch-msteams-allowlist.mjs /opt/patch-msteams-allowlist.mjs
 RUN sed -i 's/\r$//' /opt/patch-msteams-allowlist.mjs && \
     node /opt/patch-msteams-allowlist.mjs || echo "[Dockerfile] patch-msteams-allowlist failed but continuing"
 
+# ---------------------------------------------------------------------------
+# Execution layer (EXECUTION_MODE=sandbox): the Gateway launches the sandbox
+# MCP server, which offloads untrusted tool execution to ephemeral ACA
+# Sandboxes. Needs Python + the MCP/azure SDKs + the `aca` CLI + the adapter
+# package. Inert unless EXECUTION_MODE=sandbox (entrypoint registers the MCP
+# server only then), so this adds capability without changing inproc behavior.
+# ---------------------------------------------------------------------------
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 python3-pip python3-venv curl && \
+    # The `aca` CLI (preview, .NET single-file) is built against glibc 2.38, but
+    # the OpenClaw base image is Debian 12 bookworm (glibc 2.36). glibc is
+    # backward compatible (newer libc runs older binaries), so pull libc6 from
+    # Debian trixie to satisfy aca's floor — node keeps working against 2.41.
+    echo 'deb http://deb.debian.org/debian trixie main' > /etc/apt/sources.list.d/trixie.list && \
+    apt-get update && \
+    apt-get install -y -t trixie libc6 && \
+    rm -f /etc/apt/sources.list.d/trixie.list && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip3 install --no-cache-dir --break-system-packages "mcp>=1.2" "anyio>=4.0" "azure-identity>=1.19" "requests>=2.32" && \
+    (curl -fsSL https://aka.ms/aca-cli-install | sh || echo "[Dockerfile] aca CLI install deferred to runtime") && \
+    # Fail the build loudly if aca still can't run (glibc floor not met).
+    aca --version
+ENV PATH="/root/.aca/bin:${PATH}" \
+    PYTHONPATH="/opt:${PYTHONPATH}"
+COPY sandbox_mcp /opt/sandbox_mcp
+# Make `sandbox_mcp` importable WITHOUT PYTHONPATH. The OpenClaw MCP host spawns
+# stdio servers with a scrubbed environment and hard-blocks PYTHONPATH (anti
+# code-injection), so `python3 -m sandbox_mcp.server` must resolve the package
+# from site-packages. Symlink it next to the already-installed `mcp` package.
+RUN SP="$(python3 -c 'import mcp,os;print(os.path.dirname(os.path.dirname(mcp.__file__)))')" && \
+    ln -sfn /opt/sandbox_mcp "$SP/sandbox_mcp" && \
+    python3 -c "import sandbox_mcp; print('[Dockerfile] sandbox_mcp importable at', sandbox_mcp.__file__)"
+
 # Copy entrypoint (handles state restore/save with Azure Files)
 # Fix line endings to LF (git on Windows may convert to CRLF)
 COPY entrypoint.sh /opt/entrypoint.sh

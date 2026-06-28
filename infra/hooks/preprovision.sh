@@ -25,27 +25,8 @@ fi
 
 # Read a free-form azd env value (returns empty string if unset).
 azd_flag() {
-    local value
-
-    if ! value="$(azd env get-value "$1" 2>/dev/null)"; then
-        echo ""
-        return 0
-    fi
-
-    value="$(printf '%s' "$value" | tr -d '[:space:]')"
-
-    # `azd env get-value` may print error text when a key is missing.
-    case "$value" in
-        ERROR:*|Suggestion:*)
-            echo ""
-            ;;
-        *)
-            echo "$value"
-            ;;
-    esac
+    azd env get-value "$1" 2>/dev/null | tr -d '[:space:]' || true
 }
-
-GUID_REGEX='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
 
 # Some corporate tenants require a serviceManagementReference (an SMR GUID
 # referencing a service catalogue / asset management record) on every new
@@ -54,27 +35,14 @@ GUID_REGEX='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA
 #   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>
 SMR="$(azd_flag SERVICE_MANAGEMENT_REFERENCE)"
 SMR_ARGS=()
-if [ -z "$SMR" ]; then
-    # Auto-detect: look for an SMR on the user's existing app registrations
-    echo "[preprovision] SERVICE_MANAGEMENT_REFERENCE not set — checking existing app registrations..."
-    DETECTED_SMR=$(az ad app list --show-mine --query "[?serviceManagementReference != null].serviceManagementReference | [0]" -o tsv 2>/dev/null || echo "")
-    if echo "$DETECTED_SMR" | grep -Eq "^$GUID_REGEX$"; then
-        echo "[preprovision] Auto-detected SMR from your existing apps: $DETECTED_SMR"
-        echo "[preprovision] Using it. To override, run: azd env set SERVICE_MANAGEMENT_REFERENCE <your-guid>"
-        SMR="$DETECTED_SMR"
-        azd env set SERVICE_MANAGEMENT_REFERENCE "$SMR"
-        echo "[preprovision] Saved SERVICE_MANAGEMENT_REFERENCE=$SMR"
-    else
-        echo "[preprovision] No SMR found on your existing apps — proceeding without one."
-        echo "[preprovision]   If app creation fails with 'ServiceManagementReference field is required',"
-        echo "[preprovision]   get the GUID from your tenant admin and run:"
-        echo "[preprovision]     azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
-        echo "[preprovision]     devclaw up"
-    fi
-fi
 if [ -n "$SMR" ]; then
-    echo "[preprovision] Using serviceManagementReference: $SMR"
-    SMR_ARGS=(--service-management-reference "$SMR")
+    if [[ "$SMR" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+        echo "[preprovision] Using serviceManagementReference: $SMR"
+        SMR_ARGS=(--service-management-reference "$SMR")
+    else
+        echo "[preprovision] WARNING: SERVICE_MANAGEMENT_REFERENCE='$SMR' is not a GUID - ignoring."
+        echo "[preprovision]   Set it to the service-tree GUID from your tenant admin: azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -84,32 +52,25 @@ fi
 #    Then re-run `devclaw up`. Existing deployments that already have a
 #    BOT_APP_ID continue to work without setting the flag.
 # ---------------------------------------------------------------------------
-EXISTING_APP_ID=$(azd_flag BOT_APP_ID | grep -Eo "$GUID_REGEX" || echo "")
+EXISTING_APP_ID=$(azd env get-value BOT_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
 ENABLE_TEAMS_FLAG="$(azd_flag ENABLE_TEAMS)"
-ENABLE_TEAMS_FLAG_LOWER="$(printf '%s' "$ENABLE_TEAMS_FLAG" | tr '[:upper:]' '[:lower:]')"
 if [ -n "$EXISTING_APP_ID" ]; then
     echo "[preprovision] Bot app registration already exists: $EXISTING_APP_ID"
-elif [ "$ENABLE_TEAMS_FLAG_LOWER" != "true" ]; then
+elif [ "${ENABLE_TEAMS_FLAG,,}" != "true" ]; then
     echo "[preprovision] Teams integration not enabled — skipping bot app registration."
     echo "[preprovision]   To enable Teams later: azd env set ENABLE_TEAMS true && devclaw up"
 else
     APP_NAME="openclaw-bot-${ENV_NAME}"
     echo "[preprovision] Creating app registration: $APP_NAME"
 
-    APP_ERR=$(az ad app create \
+    APP_ID=$(az ad app create \
         --display-name "$APP_NAME" \
         --sign-in-audience "AzureADMyOrg" \
         ${SMR_ARGS[@]+"${SMR_ARGS[@]}"} \
-        --query appId -o tsv 2>&1)
-    APP_ID=$(echo "$APP_ERR" | grep -Eo "$GUID_REGEX" | head -1)
+        --query appId -o tsv 2>/dev/null)
 
     if [ -z "$APP_ID" ]; then
         echo "[preprovision] ERROR: Failed to create bot app registration"
-        if echo "$APP_ERR" | grep -qi "serviceManagementReference"; then
-            echo "[preprovision]   Cause: Your tenant requires a serviceManagementReference on app registrations."
-            echo "[preprovision]   Fix:   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
-            echo "[preprovision]          (get the GUID from your tenant admin)"
-        fi
         exit 1
     fi
 
@@ -149,7 +110,7 @@ fi
 # Easy Auth — Entra ID app registration for ACA built-in authentication
 # Forces Microsoft login before any request reaches the container
 # ---------------------------------------------------------------------------
-EXISTING_AUTH_ID=$(azd_flag EASYAUTH_APP_ID | grep -Eo "$GUID_REGEX" || echo "")
+EXISTING_AUTH_ID=$(azd env get-value EASYAUTH_APP_ID 2>/dev/null | grep -oP '^[0-9a-f-]+$' || echo "")
 if [ -n "$EXISTING_AUTH_ID" ]; then
     echo "[preprovision] Easy Auth app registration already exists: $EXISTING_AUTH_ID"
 else
@@ -157,24 +118,16 @@ else
     echo "[preprovision] Creating Easy Auth app registration: $AUTH_APP_NAME"
 
     # Create with placeholder redirect URI (updated after Bicep creates the container app)
-    AUTH_OUTPUT=$(az ad app create \
+    AUTH_APP_ID=$(az ad app create \
         --display-name "$AUTH_APP_NAME" \
         --sign-in-audience "AzureADMyOrg" \
         --web-redirect-uris "https://placeholder.azurecontainerapps.io/.auth/login/aad/callback" \
         --enable-id-token-issuance true \
         ${SMR_ARGS[@]+"${SMR_ARGS[@]}"} \
-        --query appId -o tsv 2>&1)
-    AUTH_APP_ID=$(echo "$AUTH_OUTPUT" | grep -Eo "$GUID_REGEX" | head -1)
+        --query appId -o tsv 2>/dev/null)
 
     if [ -z "$AUTH_APP_ID" ]; then
         echo "[preprovision] ERROR: Failed to create Easy Auth app registration"
-        if echo "$AUTH_OUTPUT" | grep -qi "serviceManagementReference"; then
-            echo "[preprovision]   Cause: Your tenant requires a serviceManagementReference on app registrations."
-            echo "[preprovision]   Fix:   azd env set SERVICE_MANAGEMENT_REFERENCE <guid>"
-            echo "[preprovision]          (get the GUID from your tenant admin)"
-        else
-            echo "[preprovision]   Output: $AUTH_OUTPUT"
-        fi
         exit 1
     fi
 

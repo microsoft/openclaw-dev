@@ -11,7 +11,7 @@ Identity** (no API keys), gated by **Entra ID Easy Auth**, with an optional
 ## Start here
 
 For any deploy / configure / operate / Teams / troubleshoot / teardown request,
-follow the full playbook in **[`skills/openclaw-on-azure/SKILL.md`](skills/openclaw-on-azure/SKILL.md)**.
+follow the full playbook in **[`skills/openclaw-dev/SKILL.md`](skills/openclaw-dev/SKILL.md)**.
 It contains the command map, env-var contract, region list, and error catalog.
 
 ## Non-negotiable rules
@@ -33,7 +33,7 @@ It contains the command map, env-var contract, region list, and error catalog.
   is already disabled; image pulls use the container app's managed identity.
 - **Region** `AZURE_LOCATION` must be in the allowed list in `infra/main.bicep`;
   set `AZURE_OPENAI_LOCATION` separately if that region lacks the model SKU.
-- **Azure OpenAI only today** (default `gpt-5-mini`). Don't claim Claude / other
+- **Azure OpenAI only today** (default `gpt-5.4-mini`). Don't claim Claude / other
   Foundry Models work yet — they're future scope.
 - **Passwordless:** model calls use Managed Identity (`disableLocalAuth: true`).
   Never add or suggest API keys.
