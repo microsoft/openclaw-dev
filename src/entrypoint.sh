@@ -22,6 +22,80 @@ for dir in credentials workspace sessions; do
     fi
 done
 
+# -----------------------------------------------------------------------------
+# Pre-seed the agent workspace with a stable identity and mark first-run setup
+# complete. This is a pre-configured deployment, so OpenClaw's interactive
+# BOOTSTRAP.md "who am I?" ritual must never run — it also fails visibly when the
+# agent tries to delete BOOTSTRAP.md via an empty write (the workspace write tool
+# rejects empty content). Because storage is often ephemeral here, the workspace
+# resets on every replica restart, which would resurface that ritual + error each
+# time. Combined with agents.defaults.skipBootstrap=true in openclaw.json, seeding
+# a persona + a setup-complete marker guarantees a clean, consistent OpenClaw on
+# every boot. Files are only written when missing, so a restored/customized
+# workspace always wins.
+# -----------------------------------------------------------------------------
+WS="/root/.openclaw/workspace"
+mkdir -p "$WS"
+seed_ws() { # $1=filename; content on stdin. Writes only if the file is absent.
+    if [ ! -f "$WS/$1" ]; then
+        cat > "$WS/$1"
+        echo "[openclaw] seeded workspace/$1"
+    else
+        cat > /dev/null  # drain heredoc; keep existing (restored) file
+    fi
+}
+
+seed_ws IDENTITY.md <<'EOF'
+# IDENTITY.md - Agent Identity
+
+- Name: OpenClaw
+- Creature: AI assistant
+- Vibe: warm, concise, resourceful
+- Emoji: 🦞
+EOF
+
+seed_ws SOUL.md <<'EOF'
+# SOUL.md - Who You Are
+
+You are OpenClaw, a helpful AI assistant hosted securely on Azure.
+
+- Be direct, warm, and concise — keep replies tight unless asked for more.
+- You run in an isolated, disposable sandbox: code and commands run here, never on the user's machine.
+- Be careful with private data and external or destructive actions; ask first when unsure.
+EOF
+
+seed_ws AGENTS.md <<'EOF'
+# AGENTS.md - OpenClaw Workspace
+
+## How you run things (read first)
+- You have no local shell or filesystem. Never guess or fabricate command output.
+- To run a command, call the `sandbox_run` tool. To run code, call `sandbox_run_code` (python | node | bash).
+- These execute inside an isolated, disposable Azure Container Apps sandbox, so running untrusted code is safe.
+- Pass a stable `session_id` (for example the person's first name, or "demo") so your working directory persists across the steps of a task: clone, then list, then test all land in the same sandbox.
+- Actually run each step and report the real output.
+
+## Style
+- Be direct and concise. Lead with the result.
+- Don't exfiltrate secrets. Ask before anything destructive or external.
+EOF
+
+seed_ws USER.md <<'EOF'
+# USER.md - User Profile
+
+- Name:
+- Preferred address:
+- Timezone:
+- Notes:
+EOF
+
+# Mark first-run setup complete so BOOTSTRAP.md is never (re)seeded, and remove
+# any stale BOOTSTRAP.md that may have been restored from persistent state.
+if [ ! -f "$WS/openclaw-workspace-state.json" ]; then
+    printf '{"version":1,"setupCompletedAt":"%s"}' "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" > "$WS/openclaw-workspace-state.json"
+    echo "[openclaw] marked workspace setup complete"
+fi
+rm -f "$WS/BOOTSTRAP.md"
+
 # Canonical config (prevents stale config from Azure Files)
 cp -f /opt/openclaw.json.canonical /root/.openclaw/openclaw.json
 
@@ -73,10 +147,14 @@ fi
 # OpenClaw spawns the server over stdio with a *scrubbed* environment (the MCP
 # host drops inherited host env for startup safety), so the group config +
 # managed-identity settings must be forwarded explicitly via the `env` field.
-# All of these keys pass OpenClaw's stdio env allow-list; none are secrets.
+# The Azure MI token vars (IDENTITY_ENDPOINT/IDENTITY_HEADER/MSI_ENDPOINT) are
+# on OpenClaw's stdio env block-list, so they are forwarded under aliased
+# SANDBOX_MI_* names and restored to their canonical names by the MCP server;
+# without them the `aca` CLI cannot acquire a token and hangs. All remaining
+# keys pass OpenClaw's stdio env allow-list; none are secrets.
 if [ "${EXECUTION_MODE:-inproc}" = "sandbox" ]; then
     echo "[openclaw] EXECUTION_MODE=sandbox — registering sandbox MCP server"
-    node -e "const fs=require('fs');const p='/root/.openclaw/openclaw.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.mcp=c.mcp||{};c.mcp.servers=c.mcp.servers||{};const KEYS=['EXECUTION_MODE','AZURE_SUBSCRIPTION_ID','AZURE_RESOURCE_GROUP','AZURE_SANDBOX_GROUP_NAME','AZURE_LOCATION','SANDBOX_API_VERSION','SANDBOX_MANAGED_IDENTITY','STARTUP','SANDBOX_SCOPE','SANDBOX_DRIVER','EXEC_ACR_IMAGE','EXEC_IMAGE_DIGEST','EXEC_DISK_ID','EXEC_SNAPSHOT','OPENAI_BASE_URL','OPENAI_MODEL_DEPLOYMENT','WORKER_IDENTITY_CLIENT_ID','AZURE_SANDBOX_IDENTITY_CLIENT_ID','SANDBOX_EGRESS_ALLOW','SANDBOX_IDLE_SUSPEND_S','SANDBOX_EXEC_TIMEOUT_S'];const env={};for(const k of KEYS){const v=process.env[k];if(v!==undefined&&v!=='')env[k]=v;}c.mcp.servers['openclaw-sandbox']={command:'python3',args:['-m','sandbox_mcp.server'],env,enabled:true};fs.writeFileSync(p,JSON.stringify(c,null,2));console.error('[openclaw] sandbox MCP env forwarded: '+Object.keys(env).join(','));" \
+    node -e "const fs=require('fs');const p='/root/.openclaw/openclaw.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.mcp=c.mcp||{};c.mcp.servers=c.mcp.servers||{};const KEYS=['EXECUTION_MODE','AZURE_SUBSCRIPTION_ID','AZURE_RESOURCE_GROUP','AZURE_SANDBOX_GROUP_NAME','AZURE_LOCATION','SANDBOX_API_VERSION','SANDBOX_MANAGED_IDENTITY','STARTUP','SANDBOX_SCOPE','SANDBOX_DRIVER','EXEC_ACR_IMAGE','EXEC_IMAGE_DIGEST','EXEC_DISK_ID','EXEC_SNAPSHOT','OPENAI_BASE_URL','OPENAI_MODEL_DEPLOYMENT','WORKER_IDENTITY_CLIENT_ID','AZURE_SANDBOX_IDENTITY_CLIENT_ID','SANDBOX_EGRESS_ALLOW','SANDBOX_IDLE_SUSPEND_S','SANDBOX_EXEC_TIMEOUT_S'];const env={};for(const k of KEYS){const v=process.env[k];if(v!==undefined&&v!=='')env[k]=v;}if(process.env.IDENTITY_ENDPOINT)env['SANDBOX_MI_ENDPOINT']=process.env.IDENTITY_ENDPOINT;if(process.env.IDENTITY_HEADER)env['SANDBOX_MI_HEADER']=process.env.IDENTITY_HEADER;if(process.env.MSI_ENDPOINT)env['SANDBOX_MSI_ENDPOINT']=process.env.MSI_ENDPOINT;c.mcp.servers['openclaw-sandbox']={command:'python3',args:['-m','sandbox_mcp.server'],env,enabled:true,requestTimeoutMs:240000,connectionTimeoutMs:60000};fs.writeFileSync(p,JSON.stringify(c,null,2));console.error('[openclaw] sandbox MCP env forwarded: '+Object.keys(env).join(','));" \
         && echo "[openclaw] sandbox MCP server registered (python3 -m sandbox_mcp.server)" \
         || echo "[openclaw] WARNING: failed to register sandbox MCP server"
     # Smoke the adapter deps + import so failures surface in logs (non-fatal).
