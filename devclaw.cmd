@@ -7,6 +7,11 @@ REM .azure-cli); only fall back to the repo-local .azure when nothing is set.
 REM Pinning az at a dir with no signed-in account is the #1 cause of false
 REM "resource not found" errors in status/teams.
 if not defined AZURE_CONFIG_DIR set "AZURE_CONFIG_DIR=%~dp0.azure"
+REM If az isn't signed in under that dir, fall back to its default config
+REM (%USERPROFILE%\.azure) where the user's real login usually lives, so
+REM status/teams don't come back mysteriously blank.
+call az account show -o none >nul 2>&1
+if errorlevel 1 set "AZURE_CONFIG_DIR="
 set "COMMAND=%1"
 if "%COMMAND%"=="" set "COMMAND=status"
 
