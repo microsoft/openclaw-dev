@@ -162,8 +162,8 @@
 
       <g transform="translate(20,82)">
         <rect width="430" height="30" rx="15" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.2"/>
-        <text x="14" y="20" font-size="11" font-weight="700" font-family="ui-monospace,Consolas,Menlo,monospace" fill="#7C3AED">REST</text>
-        <text x="58" y="20" font-size="11" fill="#0A2540" font-family="ui-monospace,Consolas,Menlo,monospace">POST /openai/v1/responses</text>
+        <text x="14" y="20" font-size="11" font-weight="700" font-family="ui-monospace,Consolas,Menlo,monospace" fill="#7C3AED">OpenAI REST API</text>
+        <text x="58" y="20" font-size="11" fill="#0A2540" font-family="ui-monospace,Consolas,Menlo,monospace"></text>
       </g>
       <g transform="translate(20,120)">
         <rect width="430" height="30" rx="15" fill="#FFFFFF" stroke="#A78BFA" stroke-width="1.2"/>

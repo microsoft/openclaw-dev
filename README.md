@@ -1,44 +1,8 @@
 # 🦞 openclaw-dev   
 
-> **Alpha** — Experimental template for a secure, hosted [OpenClaw](https://github.com/openclaw/openclaw). No production-readiness guarantees. Review all configurations before deploying with sensitive data.
+> **Alpha** — Experimental template for a secure, hosted [OpenClaw](https://github.com/openclaw/openclaw) powered by OpenAI-compatible models. No production-readiness guarantees. Review all configurations before deploying with sensitive data.
 
-Your own **always-on AI assistant**, running safely in the cloud and reachable from **Microsoft Teams on your phone** — not on your laptop. It runs on **Azure Container Apps**, talks to **Azure OpenAI in Foundry Models** with a **Managed Identity** (no API keys), and can offload risky tool execution to **ephemeral, isolated sandboxes**. One command to deploy, one to tear down — or just ask your AI agent to do it.
-
-![openclaw-dev architecture](docs/architecture-sandbox.svg)
-
-**Why this template:** OpenClaw is powerful but runs arbitrary code and can be fooled by prompt injection — so you should not run it on your work machine. This template puts it in an **isolated, ephemeral container** instead, signs in your users with their **Microsoft work account**, and talks to the model with a **Managed Identity** so there are **no API keys anywhere**. See [Safety](#security) for the full defense-in-depth story.
-
-→ Jump to: [Ask your agent](#deploy-by-asking-your-agent) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Use it from Teams](#teams-setup) · [Advanced & reference](#advanced--reference)
-
-## Deploy by asking your agent
-
-This repo ships an **AI agent skill** so any assistant that reads
-[`.github/copilot-instructions.md`](.github/copilot-instructions.md) or
-[`AGENTS.md`](AGENTS.md) (GitHub Copilot Chat, Claude Code, Cursor, Codex, and
-friends) can set up and run everything for you in plain English — no need to
-memorize `azd` env vars or scroll the troubleshooting tables.
-
-**How to use it:** clone the repo, open it in VS Code with
-[GitHub Copilot Chat](https://docs.github.com/copilot) (or your preferred agent),
-and just ask. (Already cloned the repo? Your agent picks the skill up
-automatically. To add it to a different workspace, run
-`npx skills add microsoft/openclaw-dev`.) Try:
-
-- *"Deploy OpenClaw to `eastus2`."*
-- *"Run tool execution in ephemeral sandboxes."*
-- *"Connect it to Microsoft Teams so I can use it from my phone."*
-- *"Why is `devclaw up` failing?"*
-- *"Stop it to save money, then start it again tomorrow."*
-- *"Restrict access to just my team."*
-- *"Tear it all down cleanly."*
-
-The assistant follows the playbook in
-[`skills/openclaw-dev/SKILL.md`](skills/openclaw-dev/SKILL.md) and the
-always-on rules in [`.github/copilot-instructions.md`](.github/copilot-instructions.md)
-— using this repo's own scripts, env-var contract, region list, and error catalog
-instead of guessing. It always confirms with you before any destructive action
-(`devclaw down`, `az ad app delete`, RBAC removal). The skill follows the open
-[Agent Skills](https://agentskills.io/) format, so it works across many agents.
+A secure, hosted [OpenClaw](https://github.com/openclaw/openclaw) deployment wired to **any OpenAI-compatible Foundry Model** including Azure OpenAI models. For developers who want to try openclaw in the cloud without running it on their laptop. No local install. No API keys. Nuke-and-pave in one command.
 
 ## Why cloud instead of your laptop?
 
@@ -101,34 +65,10 @@ devclaw start      Scale to 1 replica (resume after stop)
 devclaw stop       Scale to 0 replicas ($0, state preserved)
 devclaw restart    Restart the active revision
 devclaw deploy     Rebuild and deploy after code changes
-devclaw exec-mode <inproc|sandbox>   Choose where tools run (apply with up)
 devclaw teams      Set up Microsoft Teams integration (build sideload zip)
-devclaw clone      (sandbox host) Boot another OpenClaw from the existing image
 devclaw down       Delete ALL Azure resources and Entra app regs (nuke & pave)
 devclaw login      Switch Azure account
 ```
-
-Two commands you'll add later: `devclaw exec-mode sandbox` (offload tool execution
-to ephemeral sandboxes) and `devclaw teams` (add the Microsoft Teams channel).
-
-## How it works
-
-openclaw-dev is **one cloud "brain"** plus **many disposable sandboxes**:
-
-- The **openclaw brain** runs on **Azure Container Apps** and calls **Azure OpenAI in Foundry Models** (default `gpt-5.4-mini`) over a **Managed Identity** — `disableLocalAuth: true`, so there are no keys to leak.
-- **Entra ID Easy Auth** forces a Microsoft sign-in (scoped to your tenant) before anyone reaches the brain.
-- Turn on **sandbox execution** (`devclaw exec-mode sandbox`) and every untrusted tool run — shell, code, browser — is handed to an **ephemeral, isolated ACA Sandbox** that's destroyed after the task, so the brain is never exposed to the code it runs.
-- **Microsoft Teams** is an optional channel so you can reach it from your phone.
-
-The diagram at the top of this README shows the full topology ([docs/architecture-sandbox.svg](docs/architecture-sandbox.svg)).
-
-### Execution modes
-
-| Mode | Turn on with | What runs where |
-|---|---|---|
-| In-process (default) | — | tools run inside the brain container |
-| **Sandbox execution** | `devclaw exec-mode sandbox` → `devclaw up` | tools run in throwaway ACA Sandboxes; the brain stays on ACA. Teams-compatible. |
-| Sandbox host (experimental) | `azd env set USE_SANDBOX true` → `devclaw up` | the whole brain runs in a sandbox; no Teams. |
 
 ## What can I do with this?
 
@@ -140,22 +80,12 @@ Your own **always-on AI assistant** — accessible from Teams on your phone, the
 - **"Review this PR"** — paste a GitHub PR link, get code review feedback
 - **"Write my weekly status"** — the agent tracks your sessions
 
----
-
-## Advanced & reference
-
-Everything above is enough to deploy and use openclaw-dev. The sections below are
-reference detail — the full architecture, the security model, Teams internals, and
-troubleshooting. For the complete env-var contract and error catalog, see
-[`skills/openclaw-dev/SKILL.md`](skills/openclaw-dev/SKILL.md).
-
 ## Architecture
 
 | Resource | Purpose |
 |---|---|
-| **Azure Container Apps** | Hosts the OpenClaw "brain" gateway — public HTTPS on `:18789`, ephemeral container (host layer is swappable) |
-| **ACA Sandboxes** (with `EXECUTION_MODE=sandbox`) | Ephemeral, isolated nodes the brain offloads untrusted tool execution to, via the sandbox MCP server ([`src/sandbox_mcp/`](src/sandbox_mcp/)); each is destroyed after the task |
-| **Azure OpenAI in Foundry Models** | LLM backend via the OpenAI-compatible `/openai/v1/` API — keyless (`disableLocalAuth: true`). Default: `gpt-5.4-mini`. (Scope to add Claude and other Foundry Models in the near future) |
+| **Azure Container Apps** | Hosts OpenClaw gateway — public HTTPS on `:18789`, ephemeral container (host layer is swappable) |
+| **Azure OpenAI / Foundry Models** | LLM backend via the OpenAI-compatible `/openai/v1/` API — keyless (`disableLocalAuth: true`). Default: `gpt-5-mini`; any Microsoft Foundry model exposing the OpenAI API works |
 | **Azure Bot Service** | Bot Framework registration that fronts the Teams channel; routes inbound Teams activity to the container's `/api/messages` |
 | **Managed Identity** | Container → model auth via short-lived Entra ID tokens |
 | **Entra ID Easy Auth** | Microsoft login required before reaching the WebChat UI. `/api/messages` is excluded so Bot Framework can call in with its own JWT |
@@ -182,7 +112,7 @@ graph LR
         MST["📥 @openclaw/msteams<br/>:3978 · /api/messages"]
         Auth["🔑 auth-proxy<br/>:18790 · injects MI bearer"]
     end
-    AOAI["Azure OpenAI in Foundry Models<br/>OpenAI-compatible /openai/v1 API<br/>disableLocalAuth: true"]
+    AOAI["OpenAI-compatible model<br/>Microsoft Foundry Models / Azure OpenAI<br/>disableLocalAuth: true"]
     MI["Managed Identity<br/>Entra ID token"]
     AF["Azure Files<br/>credentials / workspace / sessions"]
 
@@ -211,7 +141,7 @@ All dependencies are pinned at container build time (see [src/Dockerfile](src/Do
 | **`@azure/identity`** | `4.13.1` (plugin-bundled) / latest (auth-proxy) | Used by the auth-proxy and the msteams plugin for `DefaultAzureCredential` and `getBearerTokenProvider` — fetches/caches/refreshes Entra ID tokens for AOAI and Bot Framework | The 4.x line has been the active major since early 2024 |
 | **`http-proxy`** | latest (auth-proxy install) | Powers [src/gateway-proxy.mjs](src/gateway-proxy.mjs) — splits ingress by URL path | Long-lived, stable library |
 
-**How AOAI/Foundry is accessed**: OpenClaw speaks the **OpenAI-compatible REST API** — specifically the **Responses API** (`api: "azure-openai-responses"` in [src/openclaw.json](src/openclaw.json)) at `/openai/v1/responses` — directly. It does not depend on the official `openai` npm SDK or the older `@azure/openai` SDK. Requests flow `gateway → auth-proxy → AOAI/Foundry`; the auth-proxy attaches the MI bearer token at the wire level, so AOAI's `disableLocalAuth: true` works without API keys anywhere in the system. The auth-proxy is path-agnostic (it forwards `req.url` as-is), so the same proxy works for any OpenAI-compatible adapter — completions, responses, embeddings, audio, images. The Azure-specific `azure-openai-responses` adapter is used (rather than vanilla `openai-responses`) because AOAI's Responses surface persists reasoning items differently from OpenAI's; the Azure adapter handles the `store: true` / `previous_response_id` semantics correctly.
+**How AOAI/Foundry is accessed**: OpenClaw speaks the **OpenAI-compatible REST API** — the **Chat Completions API** (`api: "openai-completions"` in [src/openclaw.json](src/openclaw.json)) at `/openai/v1/chat/completions` — directly. It does not depend on the official `openai` npm SDK or the older `@azure/openai` SDK. Requests flow `gateway → auth-proxy → AOAI/Foundry`; the auth-proxy attaches the MI bearer token at the wire level, so AOAI's `disableLocalAuth: true` works without API keys anywhere in the system. The auth-proxy is path-agnostic (it forwards `req.url` as-is), so the same proxy works for any OpenAI-compatible surface — chat completions, responses, embeddings, audio, images — if you swap the model adapter in `openclaw.json`.
 
 **How Teams is accessed**: Inbound activities come in over HTTPS from Bot Framework to `/api/messages`. The `@openclaw/msteams` plugin validates the JWT and uses `@microsoft/teams.api` + `@microsoft/teams.apps` for everything from there — activity dispatch, replies, streaming, adaptive cards.
 
@@ -343,7 +273,7 @@ TOKEN=$(az account get-access-token --resource "https://cognitiveservices.azure.
 ENDPOINT=$(az cognitiveservices account list -g <rg> --query "[0].properties.endpoint" -o tsv)
 
 curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"model":"gpt-5.4-mini","messages":[{"role":"user","content":"Hello"}]}' \
+  -d '{"model":"gpt-5-mini","messages":[{"role":"user","content":"Hello"}]}' \
   "$ENDPOINT/openai/v1/chat/completions"
 ```
 
