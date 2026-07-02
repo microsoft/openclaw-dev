@@ -122,7 +122,7 @@ graph LR
     Proxy -->|"/api/messages"| MST
     Proxy -->|"all other paths"| GW
     MST -->|"channel events"| GW
-    GW -->|"OpenAI responses"| Auth
+    GW -->|"OpenAI REST API"| Auth
     Auth -->|"Bearer token"| AOAI
     GW -.->|"Volume mount"| AF
     MI -.->|"RBAC: Cognitive Services User"| AOAI
