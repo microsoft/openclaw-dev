@@ -1,23 +1,45 @@
 # 🦞 openclaw-dev   
 
-> **Alpha** — Experimental template for a secure, hosted [OpenClaw](https://github.com/openclaw/openclaw) powered by OpenAI-compatible models. No production-readiness guarantees. Review all configurations before deploying with sensitive data.
+> **Alpha** — Experimental template for a secure, hosted [OpenClaw](https://github.com/openclaw/openclaw). No production-readiness guarantees. Review all configurations before deploying with sensitive data.
 
-A secure, hosted [OpenClaw](https://github.com/openclaw/openclaw) deployment wired to **any OpenAI-compatible Foundry Model** including Azure OpenAI models. For developers who want to try openclaw in the cloud without running it on their laptop. No local install. No API keys. Nuke-and-pave in one command.
+![openclaw-dev architecture](docs/architecture-sandbox.svg)
 
-## Why cloud instead of your laptop?
+Your own **always-on AI assistant**, running safely in the cloud and reachable from **Microsoft Teams on your phone** — not on your laptop. It runs on **Azure Container Apps**, talks to **Azure OpenAI in Foundry Models** with a **Managed Identity** (no API keys), and can offload risky tool execution to **ephemeral, isolated sandboxes**. Deploy it in one command — or just ask your AI agent to do it for you.
 
-OpenClaw runs arbitrary code and can be deceived by prompt injection. **Don't run it on your work machine.** This template gives you an isolated, ephemeral container instead.
+→ Jump to: [Ask your agent](#deploy-by-asking-your-agent) · [Deploy with devclaw](#deploy-with-devclaw) · [What can I do?](#what-can-i-do-with-this) · [Advanced & reference](#advanced--reference)
 
-| | Your laptop ❌ | This template ✅ |
-|---|---|---|
-| **Isolation** | Shares your credentials | Ephemeral container — nothing to compromise |
-| **Credentials** | API keys on disk | Managed identity — no keys anywhere |
-| **Nuke & pave** | Reinstall OS | `devclaw down && devclaw up` (~6 min) |
-| **Always on** | Only when open | Always on. `devclaw stop` = $0 |
-| **Teams/mobile** | Only when laptop is on | Always connected |
-| **Cost** | Your hardware | ~$2-5/day running, $0 stopped |
+## Deploy by asking your agent
 
-## Quick start
+This repo ships an **AI agent skill**, so any assistant that reads
+[`.github/copilot-instructions.md`](.github/copilot-instructions.md) or
+[`AGENTS.md`](AGENTS.md) — GitHub Copilot Chat, Claude Code, Cursor, Codex, and
+friends — can set up and run everything for you in plain English. No need to
+memorize `azd` env vars or scroll the troubleshooting tables.
+
+**How to use it:** clone the repo, open it in VS Code with
+[GitHub Copilot Chat](https://docs.github.com/copilot) (or your preferred agent),
+and just ask. (Already cloned? Your agent picks the skill up automatically. To add
+it to another workspace, run `npx skills add microsoft/openclaw-dev`.) Try:
+
+- *"Deploy OpenClaw to `eastus2`."*
+- *"Run tool execution in ephemeral sandboxes."*
+- *"Connect it to Microsoft Teams so I can use it from my phone."*
+- *"Why is `devclaw up` failing?"*
+- *"Stop it to save money, then start it again tomorrow."*
+- *"Restrict access to just my team."*
+- *"Tear it all down cleanly."*
+
+The assistant follows the playbook in
+[`skills/openclaw-dev/SKILL.md`](skills/openclaw-dev/SKILL.md) and the always-on
+rules in [`.github/copilot-instructions.md`](.github/copilot-instructions.md) — using
+this repo's own scripts, env-var contract, region list, and error catalog instead of
+guessing. It always confirms with you before any destructive action (`devclaw down`,
+`az ad app delete`, RBAC removal). The skill follows the open
+[Agent Skills](https://agentskills.io/) format, so it works across many agents.
+
+## Deploy with devclaw
+
+Prefer to drive it yourself? `devclaw` is a thin wrapper over the Azure Developer CLI (`azd`).
 
 ### Prerequisites
 
@@ -54,7 +76,7 @@ devclaw logs     # Tail logs until you see `[gateway] starting HTTP server`
 
 After deployment, open the URL from `devclaw status` in your browser. If Entra ID Easy Auth is configured, you'll be prompted to sign in with your Microsoft account — after that the chat UI loads automatically with no further credentials needed.
 
-## CLI reference
+### CLI reference
 
 ```
 devclaw up         Deploy OpenClaw to Azure (provision + build + deploy)
@@ -65,10 +87,14 @@ devclaw start      Scale to 1 replica (resume after stop)
 devclaw stop       Scale to 0 replicas ($0, state preserved)
 devclaw restart    Restart the active revision
 devclaw deploy     Rebuild and deploy after code changes
+devclaw exec-mode <inproc|sandbox>   Choose where tools run (apply with up)
 devclaw teams      Set up Microsoft Teams integration (build sideload zip)
+devclaw clone      (sandbox host) Boot another OpenClaw from the existing image
 devclaw down       Delete ALL Azure resources and Entra app regs (nuke & pave)
 devclaw login      Switch Azure account
 ```
+
+Two commands you'll likely add later: `devclaw exec-mode sandbox` (offload tool execution to ephemeral sandboxes) and `devclaw teams` (add the Microsoft Teams channel).
 
 ## What can I do with this?
 
@@ -80,12 +106,49 @@ Your own **always-on AI assistant** — accessible from Teams on your phone, the
 - **"Review this PR"** — paste a GitHub PR link, get code review feedback
 - **"Write my weekly status"** — the agent tracks your sessions
 
+## Advanced & reference
+
+Everything above gets you deployed. The rest — why cloud instead of your laptop, the full architecture, the security model, Teams internals, and troubleshooting — is reference detail. For the complete env-var contract and error catalog, see [`skills/openclaw-dev/SKILL.md`](skills/openclaw-dev/SKILL.md).
+
+## Why cloud instead of your laptop?
+
+OpenClaw runs arbitrary code and can be deceived by prompt injection. **Don't run it on your work machine.** This template gives you an isolated, ephemeral container instead.
+
+| | Your laptop ❌ | This template ✅ |
+|---|---|---|
+| **Isolation** | Shares your credentials | Ephemeral container — nothing to compromise |
+| **Credentials** | API keys on disk | Managed identity — no keys anywhere |
+| **Nuke & pave** | Reinstall OS | `devclaw down && devclaw up` (~6 min) |
+| **Always on** | Only when open | Always on. `devclaw stop` = $0 |
+| **Teams/mobile** | Only when laptop is on | Always connected |
+| **Cost** | Your hardware | ~$2-5/day running, $0 stopped |
+
+## How it works
+
+openclaw-dev is **one cloud "brain"** plus **many disposable sandboxes**:
+
+- The **openclaw brain** runs on **Azure Container Apps** and calls **Azure OpenAI in Foundry Models** (default `gpt-5.4-mini`) over a **Managed Identity** — `disableLocalAuth: true`, so there are no keys to leak.
+- **Entra ID Easy Auth** forces a Microsoft sign-in (scoped to your tenant) before anyone reaches the brain.
+- Turn on **sandbox execution** (`devclaw exec-mode sandbox`) and every untrusted tool run — shell, code, browser — is handed to an **ephemeral, isolated ACA Sandbox** that's destroyed after the task, so the brain is never exposed to the code it runs.
+- **Microsoft Teams** is an optional channel so you can reach it from your phone.
+
+The diagram at the top of this README shows the full topology ([docs/architecture-sandbox.svg](docs/architecture-sandbox.svg)).
+
+### Execution modes
+
+| Mode | Turn on with | What runs where |
+|---|---|---|
+| In-process (default) | — | tools run inside the brain container |
+| **Sandbox execution** | `devclaw exec-mode sandbox` → `devclaw up` | tools run in throwaway ACA Sandboxes; the brain stays on ACA. Teams-compatible. |
+| Sandbox host (experimental) | `azd env set USE_SANDBOX true` → `devclaw up` | the whole brain runs in a sandbox; no Teams. |
+
 ## Architecture
 
 | Resource | Purpose |
 |---|---|
-| **Azure Container Apps** | Hosts OpenClaw gateway — public HTTPS on `:18789`, ephemeral container (host layer is swappable) |
-| **Azure OpenAI / Foundry Models** | LLM backend via the OpenAI-compatible `/openai/v1/` API — keyless (`disableLocalAuth: true`). Default: `gpt-5-mini`; any Microsoft Foundry model exposing the OpenAI API works |
+| **Azure Container Apps** | Hosts the OpenClaw "brain" gateway — public HTTPS on `:18789`, ephemeral container (host layer is swappable) |
+| **ACA Sandboxes** (with `EXECUTION_MODE=sandbox`) | Ephemeral, isolated nodes the brain offloads untrusted tool execution to, via the sandbox MCP server ([`src/sandbox_mcp/`](src/sandbox_mcp/)); each is destroyed after the task |
+| **Azure OpenAI in Foundry Models** | LLM backend via the OpenAI-compatible `/openai/v1/` API — keyless (`disableLocalAuth: true`). Default: `gpt-5.4-mini`. (Scope to add Claude and other Foundry Models in the near future) |
 | **Azure Bot Service** | Bot Framework registration that fronts the Teams channel; routes inbound Teams activity to the container's `/api/messages` |
 | **Managed Identity** | Container → model auth via short-lived Entra ID tokens |
 | **Entra ID Easy Auth** | Microsoft login required before reaching the WebChat UI. `/api/messages` is excluded so Bot Framework can call in with its own JWT |
@@ -273,7 +336,7 @@ TOKEN=$(az account get-access-token --resource "https://cognitiveservices.azure.
 ENDPOINT=$(az cognitiveservices account list -g <rg> --query "[0].properties.endpoint" -o tsv)
 
 curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"model":"gpt-5-mini","messages":[{"role":"user","content":"Hello"}]}' \
+  -d '{"model":"gpt-5.4-mini","messages":[{"role":"user","content":"Hello"}]}' \
   "$ENDPOINT/openai/v1/chat/completions"
 ```
 
