@@ -21,8 +21,24 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 
 import anyio
+
+# OpenClaw spawns this server over stdio with a scrubbed environment that drops
+# the Azure managed-identity token vars (IDENTITY_ENDPOINT/IDENTITY_HEADER/
+# MSI_ENDPOINT) needed for keyless auth. The gateway forwards them under
+# aliased SANDBOX_MI_* names (which pass the stdio env allow-list); restore the
+# canonical names here so the `aca` subprocess and azure-identity can acquire a
+# token instead of hanging. Must run before any adapter/aca invocation.
+for _alias, _canonical in (
+    ("SANDBOX_MI_ENDPOINT", "IDENTITY_ENDPOINT"),
+    ("SANDBOX_MI_HEADER", "IDENTITY_HEADER"),
+    ("SANDBOX_MSI_ENDPOINT", "MSI_ENDPOINT"),
+):
+    _val = os.environ.get(_alias)
+    if _val and not os.environ.get(_canonical):
+        os.environ[_canonical] = _val
 
 from .factory import group_config_from_env, make_adapter, settings_from_env
 from .interface import SandboxHandle
