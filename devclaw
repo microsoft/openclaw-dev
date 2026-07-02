@@ -18,6 +18,12 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 # Pinning az at a dir with no signed-in account is the #1 cause of false
 # "resource not found" errors in status/teams.
 export AZURE_CONFIG_DIR="${AZURE_CONFIG_DIR:-$ROOT/.azure}"
+# If az isn't signed in under that dir, fall back to its default config
+# (~/.azure) where the user's real login usually lives, so status/teams don't
+# come back mysteriously blank.
+if command -v az >/dev/null 2>&1 && ! az account show -o none >/dev/null 2>&1; then
+    unset AZURE_CONFIG_DIR
+fi
 
 C='\033[36m'   # cyan
 G='\033[32m'   # green
